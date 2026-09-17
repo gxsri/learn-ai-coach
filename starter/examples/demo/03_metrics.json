@@ -1,0 +1,63 @@
+{
+  "session_id": "demo",
+  "generated_at": "2026-09-16T15:50:47",
+  "video": "(合成数据，没有真实视频)",
+  "fps": 30.0,
+  "parameters": {
+    "hand": "right",
+    "min_speed_shoulder_units_per_sec": 3.0,
+    "min_gap_frames": 10,
+    "conf_threshold": 0.5,
+    "savgol_window": 11
+  },
+  "total_hits": 6,
+  "untracked_rows_skipped": 0,
+  "players": {
+    "100": {
+      "frames": 300,
+      "shoulder_width_px": 60.2,
+      "hits": 3,
+      "hit_frames": [
+        39,
+        149,
+        260
+      ],
+      "wrist_speed_max": 10.092,
+      "wrist_speed_mean": 9.982,
+      "elbow_angle_mean_deg": 170.7,
+      "elbow_angle_std_deg": 4.2,
+      "elbow_angle_min_deg": 164.8,
+      "elbow_angle_max_deg": 173.8,
+      "mean_gap_frames": 110.5,
+      "mean_gap_seconds": 3.68,
+      "hip_lateral_range_shoulder_units": 0.45
+    },
+    "101": {
+      "frames": 300,
+      "shoulder_width_px": 60.0,
+      "hits": 3,
+      "hit_frames": [
+        46,
+        156,
+        266
+      ],
+      "wrist_speed_max": 10.202,
+      "wrist_speed_mean": 9.953,
+      "elbow_angle_mean_deg": 170.5,
+      "elbow_angle_std_deg": 5.1,
+      "elbow_angle_min_deg": 163.3,
+      "elbow_angle_max_deg": 174.4,
+      "mean_gap_frames": 110.0,
+      "mean_gap_seconds": 3.67,
+      "hip_lateral_range_shoulder_units": 0.46
+    }
+  },
+  "limitations": [
+    "所有关节角均为【画面投影角】，不是生物力学真值。单目 2D 存在系统性低估（文献对照：髋约 -11.2 度、膝约 -10.6 度）。",
+    "只应做同一机位、同一球员的纵向对比，不要跨机位或跨设备比较。",
+    "角度差异小于 10.0 度时不应下结论。",
+    "击球时刻由手腕速度峰值推断，遮挡或运动模糊严重时会漏检/误检。",
+    "所有位移量以肩宽为单位；要换成米必须先做场地标定（单应变换）。",
+    "若 --fps 不是视频真实帧率，所有速度类指标都会成比例偏移。"
+  ]
+}

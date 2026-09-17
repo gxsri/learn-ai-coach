@@ -1,0 +1,51 @@
+{
+  "session_id": "demo",
+  "video": "(合成数据，没有真实视频)",
+  "model": "(合成数据)",
+  "conf_threshold": 0.5,
+  "imgsz": 640,
+  "device": "cpu",
+  "fps": 30.0,
+  "width": 1280,
+  "height": 960,
+  "frames_processed": 300,
+  "frames_without_person": 0,
+  "rows": 600,
+  "track_ids": [
+    "100",
+    "101"
+  ],
+  "keypoints": [
+    "nose",
+    "left_eye",
+    "right_eye",
+    "left_ear",
+    "right_ear",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle"
+  ],
+  "synthetic": true,
+  "ground_truth_hit_frames": {
+    "100": [
+      40,
+      150,
+      260
+    ],
+    "101": [
+      47,
+      157,
+      267
+    ]
+  },
+  "note": "这是一份合成数据，用于离线验证流水线。ground_truth_hit_frames 是\"标准答案\"。"
+}

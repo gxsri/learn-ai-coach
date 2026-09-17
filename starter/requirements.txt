@@ -1,0 +1,28 @@
+# 羽毛球动作分析 starter —— Python 依赖
+#
+# ⚠️ 安装顺序很重要：先装 torch，再装 ultralytics。
+#    反过来的话，ultralytics 会顺手给你装一个 CPU 版 torch。
+#
+# Windows + NVIDIA 显卡的推荐安装方式（不要直接 pip install -r 本文件）：
+#
+#     python -m venv .venv
+#     .\.venv\Scripts\Activate.ps1
+#     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+#     pip install ultralytics opencv-python pandas matplotlib numpy
+#
+# 或者直接运行同目录的 setup.ps1（会自动处理顺序和验证）。
+
+numpy>=1.24
+opencv-python>=4.8
+pandas>=2.0
+matplotlib>=3.7
+
+# ultralytics 在第一次调用 model.track() 时会自动装 lap（跟踪用的线性分配库）。
+# 提前装上，避免首次运行中途被打断。
+lap>=0.5.12
+
+# 下面两个由 setup.ps1 单独按正确顺序安装；写在这里只是为了说明依赖关系。
+# ⚠️ 不要同时安装 opencv-python 和 opencv-python-headless，它们共用 cv2 命名空间，
+#    会互相覆盖。一个环境只留一个 OpenCV 包。
+# torch>=2.2               # 必须先从 pytorch 官方源装 CUDA 版
+# ultralytics>=8.3         # AGPL-3.0 许可，商用需注意
