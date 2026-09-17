@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>调研 05 · 羽毛球专项 · 羽毛球 AI 教练</title>
+<meta name="description" content="ShuttleSet、TrackNet、单目 2D 的硬边界。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html" class="current">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">代码与资料</span></div>
+<h1 id="05-羽毛球专项数据集论文做法与可复现指标">05 · 羽毛球专项：数据集、论文做法与可复现指标</h1>
+<blockquote>
+<p>定位：本篇不重复 03（姿态估计）、04（骨架时序分析）的技术细节，只回答"这个领域已有什么、论文怎么做、哪些指标你做得出来"。
+检索时间：2026-09。<strong>所有数据集规模数字均附来源；未核实项显式标注。</strong></p>
+</blockquote>
+<h2 id="一句话结论">一句话结论</h2>
+<p>羽毛球领域<strong>不缺数据集、缺的是"你自己视频上的可信指标"</strong>——ShuttleSet / ShuttleSet22 / BadmintonDB 给的是"击球点坐标 + 击球类型"这类战术级标注，TrackNetV3 给的是球轨迹，而论文里那些关节角度、躯干旋转、鞭打时序指标全部来自 3D 运动捕捉，单目手机视频<strong>算不出真值</strong>；你能做的可信指标只有"画面平面内的角度/位移/时序"这一类。</p>
+<hr>
+<h2 id="核心概念">核心概念</h2>
+<h3 id="1-公开数据集真实规模与出处">1. 公开数据集（真实规模与出处）</h3>
+<table>
+<thead>
+<tr>
+<th>数据集</th>
+<th>内容与规模</th>
+<th>地址与许可</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ShuttleSet</strong></td>
+<td>44 场转播比赛（2018–2021）、104 局、<strong>3,685 回合、36,492 次击球</strong>、27 名男女单打选手；转播视频统一 30fps / 1280×720；每次击球记录击球时间与帧号、双方位置、击球点坐标（单打场地 13.4m×6.1m 单应变换得来）、击球点高于/低于网、正反手、绕头、<strong>18 类击球类型</strong>；分 6 名专业标注员标注 <a href="https://arxiv.org/abs/2306.04948">ShuttleSet 论文</a></td>
+<td><a href="https://github.com/wywyWang/CoachAI-Projects">CoachAI-Projects</a>。<strong>许可：仓库未在文件头声明明确协议，用前必须到仓库 README / issues 核对授权范围，源视频版权属 BWF 转播方</strong></td>
+</tr>
+<tr>
+<td><strong>ShuttleSet22</strong></td>
+<td>2022 年高排名赛事：训练集 2,888 回合 / 30,172 击球，验证集 450 回合 / 1,400 击球，测试集 654 回合 / 2,040 击球 <a href="https://arxiv.org/abs/2306.15664">ShuttleSet22 论文</a></td>
+<td>同上仓库 <code>CoachAI-Challenge-IJCAI2023</code> 目录</td>
+</tr>
+<tr>
+<td><strong>CoachAI 系列与挑战赛</strong></td>
+<td>官方研究项目集合，含 ShuttleSet 加载与 Flask 可视化平台；2023 年配套 IJCAI 挑战赛 Track 2 为"预测后续击球序列" <a href="https://github.com/wywyWang/CoachAI-Projects">CoachAI-Projects</a>；相关优胜方案如 <a href="https://arxiv.org/abs/2308.12645">An All Deep System</a></td>
+<td>仓库内各子项目许可需分别查看。<strong>2024 年是否举办同系列挑战赛及其赛道设置：未核实</strong></td>
+</tr>
+<tr>
+<td><strong>BadmintonDB</strong></td>
+<td>9 场真实比赛（两名顶尖选手之间）的回合、击球与结果标注，配套球员相关/独立的朴素贝叶斯回合结果预测基线 <a href="https://doi.org/10.1145/3552437.3555696">BadmintonDB 论文</a></td>
+<td><a href="https://github.com/kwban/badminton-db">kwban/badminton-db</a></td>
+</tr>
+<tr>
+<td><strong>TrackNet 系列</strong></td>
+<td>TrackNetV2：热图式小球追踪，羽毛球轨迹追踪的经典基线 <a href="https://www.computer.org/csdl/proceedings-article/icpai/2020/426200a086/1pZ165Bsj7O">TrackNetV2 论文</a>；TrackNetV3：加数据增强 + 轨迹修正（InpaintNet 补遮挡丢帧）<a href="https://dl.acm.org/doi/fullHtml/10.1145/3595916.3626370">TrackNetV3 论文</a></td>
+<td><a href="https://github.com/qaz812345/TrackNetV3">qaz812345/TrackNetV3</a>（权重 <code>ckpts/TrackNet_best.pt</code>、<code>ckpts/InpaintNet_best.pt</code>）、<a href="https://github.com/ChgygLin/TrackNetV2-pytorch">ChgygLin/TrackNetV2-pytorch</a></td>
+</tr>
+<tr>
+<td><strong>TenniSet</strong>（网球，可迁移）</td>
+<td>密集细粒度事件识别与定位数据集，被 BST 论文作为跨项目验证集 <a href="https://openaccess.thecvf.com/content/CVPR2026W/CVsports/html/Chang_BST_Badminton_Stroke-type_Transformer_for_Skeleton-based_Action_Recognition_in_Racket_CVPRW_2026_paper.html">CVPRW 2026 论文页</a></td>
+<td>许可未核实</td>
+</tr>
+</tbody>
+</table>
+<h3 id="2-文献常见分析维度">2. 文献常见分析维度</h3>
+<ul>
+<li><strong>击球类型分类</strong>：ShuttleSet 原始分类是 18 类，例如 net shot / return net / <strong>smash</strong> / wrist smash / lob / defensive return lob / clear / drive / driven flight / back-court drive / drop / passive drop / push / rush / cross-court net shot / short service / long service，另加"正反手""绕头"标记 <a href="https://arxiv.org/abs/2306.04948">ShuttleSet 论文</a>。中文语境里的搓球、推球、扑球、挑球、吊球分别对应 net shot、push、rush、lob、drop 一类标签，<strong>跨数据集标签体系并不统一，混用会直接污染训练集</strong>。</li>
+<li><strong>击球点高度与位置</strong>：ShuttleSet 存"击球点坐标 + 是否过网以上"，用单应变换映射到真实场地坐标。</li>
+<li><strong>挥拍速度 / 角速度</strong>：论文用骨架关节角度逐帧微分（见笔记 04），但高精度测量靠标记点 3D 捕捉。</li>
+<li><strong>重心转移、准备姿势、回合节奏</strong>：重心用髋中心轨迹近似；节奏用回合内击球间隔、连续多拍数等统计量。</li>
+<li><strong>步法类型</strong>（并步 / 交叉步 / 蹬跨步 / 垫步）：文献里多为<strong>人工标注或规则阈值判定</strong>，我没有找到公开的、带步法细类标签的羽毛球公开视频数据集——<strong>这是一个真实的空白，不要假设"下个数据集就有"</strong>。</li>
+<li><strong>现有系统级做法</strong>：BST 用"变宽切片（击球前/中/后）+ 姿态估计 + 球轨迹 + 场地线检测得到球员位置"，再用 Transformer 跨注意力融合，在 ShuttleSet、BadmintonDB、TenniSet 上超过此前最好结果，并强调<strong>球轨迹是主线索而非辅助</strong> <a href="https://openaccess.thecvf.com/content/CVPR2026W/CVsports/html/Chang_BST_Badminton_Stroke-type_Transformer_for_Skeleton-based_Action_Recognition_in_Racket_CVPRW_2026_paper.html">BST 论文（CVPRW 2026）</a>、<a href="https://github.com/Va6lue/BST-Badminton-Stroke-type-Transformer">代码</a>；该论文同时点出难点：动作极快且区分细微（smash vs wrist smash）、转播画面有观众/裁判/镜头运动/遮挡、通用骨架动作识别模型会把不同挥拍动作糊成"击球"一类。</li>
+</ul>
+<h3 id="3-杀球的标准生物力学指标以及单目-2D-的硬边界">3. 杀球的标准生物力学指标，以及单目 2D 的硬边界</h3>
+<p>生物力学论文的标准量：肩关节内旋角与角速度、肘关节屈伸角、躯干（胸腰段）旋转、髋-肩分离角、<strong>鞭打/动力链的近端到远端发力时序</strong>、起跳高度、地面反作用力与关节力矩、拍头速度（例如 <a href="https://www.mdpi.com/2076-3417/12/2/880">精英男选手跳杀中持拍臂关节力矩与拍头速度的关系</a>）。这些量需要 3D 运动捕捉（或测力台 + 标记点）。背景数字：羽毛球是球速最快的项目，最快击球纪录为 <strong>565 km/h</strong>（印度选手 Satwiksairaj Rankireddy，吉尼斯认证）<a href="https://www.yonex.com/news/badminton/rankireddy-and-tan-smash-guinness-world-records-title-with-the-fastest-badminton-hits/">Yonex 官方公告</a>。</p>
+<p><strong>单目 2D 为什么算不出</strong>：单目姿态估计的关节角存在系统性投影低估，一项以 3D 光学捕捉为对照的深蹲研究测得髋 <strong>−11.2°</strong>、膝 <strong>−10.6°</strong> 的低估；即使做了几何约束线性修正，均方根误差仍剩髋 <strong>4.0°</strong>、膝 <strong>3.9°</strong>，且该结果建立在<strong>固定机位、固定距离、且只有一个矢状面动作</strong>的前提上 <a href="https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2026.1831625/xml">Frontiers in Sports and Active Living</a>。推到羽毛球：绕身体纵轴的躯干旋转、肩内旋、真正的角速度与"鞭打时序"，单视角在信息论上就不足；力矩、地面反作用力完全没有数据来源。</p>
+<hr>
+<h2 id="可执行的最短路径真实命令">可执行的最短路径（真实命令）</h2>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="n">conda</span> <span class="n">create</span> <span class="p">-</span><span class="n">-name</span> <span class="n">bmt</span> <span class="n">python</span><span class="p">=</span><span class="n">3</span><span class="p">.</span><span class="n">11</span> <span class="n">-y</span>
+<span class="n">conda</span> <span class="n">activate</span> <span class="n">bmt</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">torch</span> <span class="n">torchvision</span> <span class="p">-</span><span class="n">-index-url</span> <span class="n">https</span><span class="p">://</span><span class="n">download</span><span class="p">.</span><span class="n">pytorch</span><span class="p">.</span><span class="n">org</span><span class="p">/</span><span class="n">whl</span><span class="p">/</span><span class="n">cu124</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">ultralytics</span>          <span class="c"># 姿态：yolo26n-pose.pt / yolo11n-pose.pt（COCO 17 点）</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">opencv-python</span> <span class="n">pandas</span> <span class="n">numpy</span>
+<span class="c"># 1. 先拿现成标注跑通数据加载（不要一上来就训练）</span>
+<span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">://</span><span class="n">github</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">wywyWang</span><span class="p">/</span><span class="n">CoachAI-Projects</span><span class="p">.</span><span class="n">git</span>
+<span class="c"># 2. 球轨迹追踪（TrackNetV3 官方推理入口与权重名，来自仓库 README）</span>
+<span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">://</span><span class="n">github</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">qaz812345</span><span class="p">/</span><span class="n">TrackNetV3</span><span class="p">.</span><span class="n">git</span>
+<span class="nb">cd </span><span class="n">TrackNetV3</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">-r</span> <span class="n">requirements</span><span class="p">.</span><span class="n">txt</span>
+<span class="n">python</span> <span class="n">predict</span><span class="p">.</span><span class="n">py</span> <span class="p">-</span><span class="n">-video_file</span> <span class="n">test</span><span class="p">.</span><span class="n">mp4</span> <span class="p">-</span><span class="n">-tracknet_file</span> <span class="n">ckpts</span><span class="p">/</span><span class="n">TrackNet_best</span><span class="p">.</span><span class="n">pt</span> <span class="p">`</span>
+  <span class="p">-</span><span class="n">-inpaintnet_file</span> <span class="n">ckpts</span><span class="p">/</span><span class="n">InpaintNet_best</span><span class="p">.</span><span class="n">pt</span> <span class="p">-</span><span class="n">-save_dir</span> <span class="n">prediction</span> <span class="p">-</span><span class="n">-output_video</span> <span class="p">-</span><span class="n">-large_video</span>
+<span class="c"># 3. 自录视频：直接接笔记 03/04 的骨架管线</span>
+<span class="n">yolo</span> <span class="n">pose</span> <span class="n">predict</span> <span class="n">model</span><span class="p">=</span><span class="n">yolo26n-pose</span><span class="p">.</span><span class="n">pt</span> <span class="n">source</span><span class="p">=</span><span class="n">match</span><span class="p">.</span><span class="n">mp4</span> <span class="n">save</span><span class="p">=</span><span class="n">True</span>
+</code></pre></div>
+
+<blockquote>
+<p>训练命令（<code>train.py</code> 的参数、必须的 csv 格式）我<strong>没能亲自读到仓库 README 全文</strong>（本环境对该 GitHub 域名的网络访问受限），运行前请以仓库 README 为准，不要照抄二手博客。</p>
+</blockquote>
+<hr>
+<h2 id="选型建议RTX-4060-Laptop-8GB">选型建议（RTX 4060 Laptop 8GB）</h2>
+<ul>
+<li>姿态：<code>yolo26n-pose</code> / <code>yolo26s-pose</code>（2.9M / 10.4M 参数）足够，8GB 显存可以高分辨率 + 多人同时跑 <a href="https://docs.ultralytics.com/tasks/pose/">Ultralytics Pose 文档</a>。</li>
+<li>球轨迹：TrackNetV3 输入尺寸小，8GB 能推理；<strong>不要同时把大姿态模型和 TrackNet 塞进显存跑实时</strong>，分段批处理。</li>
+<li>微调：8GB 只做小模型 + 低分辨率 + 小 batch + 梯度累积；<code>yolo26l/x-pose</code>（25.9M / 57.6M）不要碰。</li>
+<li>验证协议：ShuttleSet22 官方是按固定划分给的，<strong>自己划数据必须按"比赛 / 选手"切，绝不能按帧随机切</strong>——同一回合的相邻帧几乎相同，随机切会让准确率虚高十几个点。</li>
+<li>单位换算：先解决单应变换与比例尺（场地线当标定物），再谈"米/秒"；否则输出的只是像素/帧。</li>
+</ul>
+<hr>
+<h2 id="常见坑">常见坑</h2>
+<ol>
+<li><strong>拿单目 2D 数字当生物力学指标写进结论</strong>。角度误差量级见上文；必须写明这是"画面投影角度"，不是真值。</li>
+<li><strong>标签体系串台</strong>：ShuttleSet 18 类与中文习惯的杀/高远/吊/挑/搓/推/扑不是一一对应，自己造标签前先对齐定义。</li>
+<li><strong>转播 vs 自录</strong>：论文的难点（多人、遮挡、镜头推拉）在自录固定机位里没有，但自录引入的是手机变焦、手持抖动、快门/卷帘畸变。</li>
+<li><strong>TrackNet 在快球帧丢点</strong>：靠 InpaintNet 修复；但修复段落的"速度"是插值出来的，不能用来算球速。</li>
+<li><strong>数据集划分泄露</strong>：按帧切分是新手最常犯、也最致命的一个错。</li>
+<li><strong>标注成本</strong>：ShuttleSet 是 6 名专业标注员逐拍标注的规模；个人项目别指望复现同等标注质量，优先用峰值检测 + 人工抽检。</li>
+<li><strong>许可与版权</strong>：ShuttleSet 的授权条款需自行核对，转播视频版权不属于数据集。</li>
+</ol>
+<hr>
+<h2 id="给-AI-编程助手的提示词">给 AI 编程助手的提示词</h2>
+<ul>
+<li>我的目标：用<strong>单目手机固定机位视频</strong>算羽毛球击球指标（击球时刻、击球点画面坐标、持拍侧肘/肩角、挥拍角速度、髋中心位移、回合节奏），<strong>不要</strong>给我 3D 关节角、力矩、地面反作用力、躯干旋转角度这些单目算不出的量；如果我问了，请先告诉我为什么算不出。</li>
+<li>技术栈请用 <code>ultralytics</code>（<code>yolo26n-pose.pt</code>）+ <code>opencv-python</code> + <code>pandas</code>，先给"每帧骨架 → 平滑 → 手腕速度峰值定击球帧 → 计算角度"的最小可跑脚本，再谈模型训练。</li>
+<li>每个指标都要标注单位和"它是什么坐标系下的量"，并提醒我做单应变换标定场地比例尺；角度必须说明是 2D 投影角。</li>
+<li>数据划分请默认按"比赛/选手"切分，并主动检查有没有同一回合的相邻帧被分到训练集和测试集。</li>
+<li>涉及外部数据集（ShuttleSet / ShuttleSet22 / BadmintonDB / TrackNetV3）时，先让我确认许可与下载方式，<strong>不要凭记忆编造仓库路径、权重文件名或命令行参数</strong>；不确定就说不确定。</li>
+</ul>
+<div class="pager">
+<a class="prev" href="research-04.html"><span class="lbl">上一篇</span><span class="ttl">调研 04 · 骨架时序</span></a>
+<a class="next" href="research-06.html"><span class="lbl">下一篇</span><span class="ttl">调研 06 · 工程与部署</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>审校报告（43 条纠错） · 羽毛球 AI 教练</title>
+<meta name="description" content="6 份调研笔记的事实核查结果：12 处版本错误、3 条跑不通的命令、8 处矛盾。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html" class="current">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">代码与资料</span></div>
+<h1 id="00-调研笔记技术审校报告">00 · 调研笔记技术审校报告</h1>
+<blockquote>
+<p>审校对象：<a href="research-01.html"><code>01-YOLO技术全景与硬件选型.md</code></a> ~ <a href="research-06.html"><code>06-工程实现与可视化部署.md</code></a>（6 份，2026-09-16 产出）
+审校方式：逐份通读 + 关键断言抽样复核（Ultralytics 官方文档、PyPI、arXiv/CVF/ACM 论文页）
+审校时间：2026-09
+结论一句话：<strong>骨架搭得住，细节有硬伤</strong>——版本/参数类错误 12 处已定位到具体行与正确值；跨笔记存在 6 处结论冲突；对"羽毛球运动表现分析"这个目标，最关键的"球本身"几乎全员缺席。</p>
+</blockquote>
+<p><strong>核实通过、无需修改的要点（先给结论，避免过度怀疑）</strong></p>
+<ul>
+<li><code>ultralytics</code> 8.4.153、YOLO11（2024-09-10 发布，官方标注"Current stable release and the recommended choice for all use cases"）、YOLO26（2026-01 发布）、YOLO27 官方页明确 "The models are not yet available, and no launch date has been set" —— <strong>均正确</strong>。</li>
+<li>YOLO12 是社区模型、"may exhibit training instability, elevated memory consumption"、只发布 detect 权重（pose/seg/cls/obb 无 <code>.pt</code>，只能从 <code>.yaml</code> 从零训）—— <strong>完全正确</strong>。</li>
+<li>pose 17 点索引、YOLO26 各尺寸 pose 表（n 57.2/2.9M/7.6B、s 63.0/10.4M、m 68.8/21.5M、l 70.4/25.9M、x 71.6/57.6M）、六种跟踪器（<code>botsort</code>/<code>bytetrack</code>/<code>ocsort</code>/<code>deepocsort</code>/<code>fasttrack</code>/<code>tracktrack</code>，8.4.63 起新增，OC-SORT 适用非线性运动体育场景）—— <strong>全部与官方一致</strong>。</li>
+<li>AGPL-3.0 覆盖网络服务、微调权重商用同样触发义务；MediaPipe 1.0.1；opencv-python 5.0.0.93（OpenCV 5 已发布）；onnxruntime-gpu 1.30.0 且 <code>requires_python &gt;=3.11</code>；numpy 2.5.1；fastapi 0.140.9 —— <strong>均为真实版本号</strong>。</li>
+<li>ShuttleSet（3,685 回合 / 36,492 击球 / 18 类击球类型 / 6 名标注员 / 30fps·1280×720）、TrackNetV3、BST（arXiv 2502.21085 = CVPRW 2026 Open Access）、BadminSense（CHI 2026, DOI 10.1145/3772318.3790998）、MotionBERT（ICCV 2023）、OpenPose BODY_25/COCO-18 索引、RTX 4060 Laptop（3072 CUDA 核心 / 8GB GDDR6，Ada）—— <strong>均核实为真实，无编造</strong>。</li>
+</ul>
+<hr>
+<h2 id="一事实性错误按优先级">一、事实性错误（按优先级）</h2>
+<h3 id="P0-会造成误判或返工">P0 — 会造成误判或返工</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>文件</th>
+<th>位置</th>
+<th>错误</th>
+<th>正确值 / 依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E1</td>
+<td><code>04</code></td>
+<td>L152 与 L58 自相冲突</td>
+<td><code>pip install torch torchvision --index-url .../cu124</code> 被描述为"cu124 稳妥"，但同文件 L56 备注"cu124/cu128 都行"；更要紧的是 <strong>onnxruntime-gpu 1.30.0 的 <code>cuda</code> extra 已对齐 CUDA 13（<code>nvidia-cuda-runtime~=13.0</code>、<code>nvidia-cudnn-cu13~=9.0</code>）</strong>，若后续按 <code>06</code> 走 ORT-GPU 路线，cu124 的 torch 与 cu13 的 ORT 会打架</td>
+<td>二选一并全局统一：torch <code>cu128/cu130</code> + ORT-GPU 1.30，或锁 ORT-GPU 1.2x 配 cu124。据 <a href="https://pypi.org/project/onnxruntime-gpu/">onnxruntime-gpu PyPI</a></td>
+</tr>
+<tr>
+<td>E2</td>
+<td><code>02</code></td>
+<td>L11 标注格式说明</td>
+<td>示例与公式本身正确，但<strong>未说明类别索引与 <code>names</code> 的对应必须严格一致</strong>；同文件 L34 又写"没有目标的图可以没有 txt"，两处合起来极易让读者以为"class_id 可省略/从 1 开始"（L108 才纠正）</td>
+<td>把 L108 的"class_id 从 <strong>0</strong> 开始"提到 L11 示例旁，示例改为 <code>0 0.375 0.509 0.083 0.648   # class_id=0 == names[0]=player</code></td>
+</tr>
+<tr>
+<td>E3</td>
+<td><code>02</code></td>
+<td>L90 导出命令</td>
+<td><code>yolo export model=... format=openvino</code> 中的 <code>model=...</code> 是占位省略号，<strong>该命令原样粘贴必报错</strong>；同段另两条同样问题</td>
+<td>三条全部写全路径，或明确注明 <code>...</code> 需替换为 <code>runs/badminton/v1/weights/best.pt</code></td>
+</tr>
+<tr>
+<td>E4</td>
+<td><code>03</code></td>
+<td>L132</td>
+<td>"<code>yolo11m-pose</code> / <code>yolo26m-pose</code>（<strong>25.9M</strong> / 21.5M 参数）"</td>
+<td>YOLO26<strong>m</strong>-pose = <strong>21.5M</strong>；<strong>25.9M 是 YOLO26l-pose</strong>（且 <code>l</code> 才是该档位）。YOLO11m-pose ≈ 20.9M。据 <a href="https://docs.ultralytics.com/tasks/pose/">Ultralytics Pose 文档模型表</a></td>
+</tr>
+<tr>
+<td>E5</td>
+<td><code>05</code></td>
+<td>L70</td>
+<td>"<code>yolo26s-pose</code>（2.9M / <strong>10.4M</strong> 参数）"——把 n 的 2.9M 与 s 的 10.4M 并列成一组</td>
+<td><code>yolo26s-pose</code> = <strong>10.4M</strong>；<code>yolo26n-pose</code> = 2.9M。写成"n 2.9M / s 10.4M"或只留 s</td>
+</tr>
+<tr>
+<td>E6</td>
+<td><code>01</code></td>
+<td>L41</td>
+<td>"YOLO11-pose：n 2.9M / <strong>7.5GFLOPs</strong> / mAP 50.0"；"YOLO26n-pose 2.9M / <strong>57.2</strong>"（后者是 mAP，与前文 GFLOPs 混列）</td>
+<td>同句内单位不一致：YOLO26n-pose 的 <strong>7.6B FLOPs</strong>（非 7.5）、mAP50-95 <strong>57.2</strong>。据 <a href="https://docs.ultralytics.com/tasks/pose/">Pose 文档</a></td>
+</tr>
+<tr>
+<td>E7</td>
+<td><code>04</code></td>
+<td>L117</td>
+<td>"<strong>PYSKL v0.2</strong> 报告见 arXiv 2205.09443"</td>
+<td>PYSKL 官方 release 长期只有 v0.1.0，未见 v0.2。改为"PYSKL 论文（arXiv 2205.09443）"；ST-GCN++ 的 89.29/92.30 数字本身与 MMAction2 Model Zoo 一致</td>
+</tr>
+<tr>
+<td>E8</td>
+<td><code>04</code></td>
+<td>L31</td>
+<td>表头写"代表精度（<strong>NTU60 XSub</strong>）"，但同段又注明"配置是 8 张 GPU、100 帧均匀采样"</td>
+<td>NTU60 XSub 的 ST-GCN 官方配置为 <code>u100-80e</code>、<strong>8×GPU</strong>——与 MMAction2 一致，但<strong>"10 clips 测试协议"</strong>未见于该表来源，建议删去或改标"†未核实"</td>
+</tr>
+</tbody>
+</table>
+<h3 id="P1-表述错误误导性较强">P1 — 表述错误，误导性较强</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>文件</th>
+<th>位置</th>
+<th>错误</th>
+<th>修正</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E9</td>
+<td><code>02</code></td>
+<td>L16</td>
+<td>X-AnyLabeling 3.0「加入 <strong>Qwen3-VL、SAM3</strong> 与远程推理」</td>
+<td>与公开发布说明一致（多模态训推一体化、适配上百款模型），<strong>但引用的是微信公众号链接</strong>，非一手仓库 release。改为指向 <a href="https://github.com/CVHub520/X-AnyLabeling">CVHub520/X-AnyLabeling</a> 的 Releases 页</td>
+</tr>
+<tr>
+<td>E10</td>
+<td><code>06</code></td>
+<td>L4</td>
+<td>环境清单里 <code>opencv-python-headless 5.0.0.93</code> + L29 <code>pip install opencv-python</code></td>
+<td>OpenCV 官方明确"<strong>四个包只能装一个</strong>，无插件架构，同命名空间会冲突"；且 <strong>mediapipe 1.0.1 的依赖是 <code>opencv-contrib-python</code></strong>。同时装 headless + 普通版，或 mediapipe + opencv-python，都可能出现 <code>cv2</code> 被覆盖、<code>imshow</code> 失效等诡异现象。据 <a href="https://pypi.org/project/opencv-python/">opencv-python PyPI</a> 与 <a href="https://pypi.org/project/mediapipe/">mediapipe PyPI</a></td>
+</tr>
+<tr>
+<td>E11</td>
+<td><code>04</code></td>
+<td>L64</td>
+<td><code>pip install xgboost  # 3.1.x</code></td>
+<td>xgboost 3.1.0 已发布约 11 个月，当前最新为 <strong>3.4.1</strong>；写"3.1.x"会让读者以为是最新</td>
+</tr>
+<tr>
+<td>E12</td>
+<td><code>04</code></td>
+<td>L113-114</td>
+<td>MMAction2 学术基线命令 <code>python tools/train.py configs/skeleton/stgcn/...</code></td>
+<td>前半段是 <code>pip install mmaction2</code>（<strong>安装的是包，不含 <code>tools/</code> 与 <code>configs/</code> 目录</strong>），后半段却按 git clone 的工作流执行。二选一：<code>mim train mmaction2 &lt;config&gt;</code>，或明确"先 <code>git clone</code> 再 <code>cd mmaction2</code> 执行"</td>
+</tr>
+</tbody>
+</table>
+<h3 id="已核实为正确请勿误改的高风险断言">已核实为<strong>正确</strong>、请勿误改的高风险断言</h3>
+<ul>
+<li><code>01</code> L20「YOLO12 只发布 detect 预训练权重，pose/seg/cls/obb 的 <code>.pt</code> 全都没有」→ 官方 Pretrained weights availability 段逐字确认。</li>
+<li><code>01</code> L69「非线性运动（体育、舞蹈、急停变向）且不想要重识别开销 → OC-SORT」→ 官方 tracker 选型流程第 3 条确认。</li>
+<li><code>01</code> L16「YOLOv9 中研院 Wang」→ 指<strong>中国科学院大学</strong>（UCAS）王井东团队，措辞略含混（易读成台湾中研院），建议改为"中科院/UCAS"。</li>
+<li><code>01</code> L84「YOLO13 不存在」→ 正确，官方文档中无 YOLO13 条目。</li>
+<li><code>05</code> L36 最快击球纪录 <strong>565 km/h</strong>（Rankireddy）→ <a href="https://www.yonex.com/news/badminton/rankireddy-and-tan-smash-guinness-world-records-title-with-the-fastest-badminton-hits/">Yonex 官方公告</a> 确认。</li>
+<li><code>05</code> L38 单目低估髋 −11.2°、膝 −10.6° → 结论方向可信；<strong>但该 Frontiers 2026 文章（DOI 10.3389/fspor.2026.1831625）我未能打开正文逐字复核，请标注"待复核"</strong>。</li>
+</ul>
+<hr>
+<h2 id="二自相矛盾跨笔记冲突">二、自相矛盾（跨笔记冲突）</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>冲突点</th>
+<th>各方立场</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1</td>
+<td><strong>用 YOLO11 还是 YOLO26</strong></td>
+<td><code>01</code> L7/L77：明确"从 <code>yolo11n-pose.pt</code> 起步""版本选 YOLO11""YOLO26 更强但资料少"。<code>03</code> L8：主力"<code>yolo11n-pose.pt</code> / <code>yolo26n-pose.pt</code>"，提示词里两个并列。<code>05</code> L48/L68：直接推 <code>yolo26n-pose</code>/<code>yolo26s-pose</code>。<code>02</code> L9/L98：主线 <code>yolo26n.pt</code></td>
+<td><strong>需仲裁。</strong> 官方现状已变：YOLO26 是 SOTA 且 pose 表已齐（n 57.2 vs YOLO11n-pose 的 50.0，同 2.9M 参数），"资料少"的论证已不成立。建议统一为：<strong>新项目用 <code>yolo26n-pose.pt</code>，<code>yolo11n-pose.pt</code> 仅作为回退</strong></td>
+</tr>
+<tr>
+<td>C2</td>
+<td><strong>检测 vs 姿态，谁先做</strong></td>
+<td><code>01</code> L7：<strong>"不要从 detect 起步"</strong>。<code>02</code> 整篇以 <code>yolo detect train model=yolo26n.pt</code> 为主路径。<code>06</code> L138：用 <code>yolo11n-pose</code> + <code>model.track()</code></td>
+<td><strong>都成立但顺序矛盾。</strong> <code>01</code> 说对了（detect 出不了动作指标），<code>02</code> 是"自定义数据集训练"的技术演示。需在 <code>02</code> 开头加一句边界声明："本篇演示 detect 训练流程，但<strong>羽毛球的最终指标链路必须走 pose</strong>，见 01/03"</td>
+</tr>
+<tr>
+<td>C3</td>
+<td><strong>单目 2D 的关节角能不能用</strong></td>
+<td><code>05</code> L8/L38/L78：<strong>"论文里那些关节角度全部来自 3D 动捕，单目手机视频算不出真值""必须写明这是画面投影角度，不是真值"</strong>。<code>01</code> L7/L36：起手就"出关键点 → 算关节角度"，并称肘/肩/腕/髋/膝"正好覆盖挥拍角度"。<code>06</code> L96：<code>joint_angle(a,b,c)</code> 直接吃像素坐标。<code>04</code> L161：明确"<strong>不要用 2D 像素坐标算角度</strong>，用 <code>world_landmarks</code> 或至少按身体尺度归一化"</td>
+<td><strong><code>04</code>/<code>05</code> 对，<code>01</code>/<code>06</code> 错。</strong> 这是全套笔记里最严重的一致性缺陷：一个文件说"这批指标是投影角、别当真值"，另一个文件把它当核心卖点。必须给 <code>01</code>/<code>06</code> 的全部角度指标加<strong>"2D 投影角"</strong>限定与误差量级说明</td>
+</tr>
+<tr>
+<td>C4</td>
+<td><strong>AGPL 商用边界</strong></td>
+<td><code>01</code> L24：<strong>"完全开源项目"免费</strong>，但同段又说"<strong>必须买 Enterprise 授权：任何商业产品/服务、闭源软件……以及用自己微调出来的模型商用</strong>"——两句在语义上打架。<code>03</code> L23/L159：口径较宽（"只要不闭源商用就没问题"）。<code>02</code>：全文<strong>未提许可证</strong>。<code>06</code>：全文<strong>未提许可证</strong>，却在 L139 推荐接 BST 做商用形态</td>
+<td>统一为 <code>01</code> 的严格口径，并把许可证一节补进 <code>02</code>/<code>06</code>（尤其 <code>06</code> 是"部署"篇，缺许可证是结构性缺口）</td>
+</tr>
+<tr>
+<td>C5</td>
+<td><strong>羽毛球（shuttle）用什么检测</strong></td>
+<td><code>02</code> L5/L31/L100：把 <code>shuttle</code> 当 YOLO detect 的<strong>第三个类别</strong>训练，并承认"640 下常常只有几个像素，是最大瓶颈"。<code>05</code> L8/L22：<strong>TrackNet 系列（热图式小球追踪）才是球的经典方案</strong>，且给出 TrackNetV3 推理命令</td>
+<td><strong><code>05</code> 对，<code>02</code> 缺一整条技术路线。</strong> 热图回归 == 不是检测框问题；<code>02</code> 应显式指向 TrackNetV3，不要鼓励新手标注 shuttle 框</td>
+</tr>
+<tr>
+<td>C6</td>
+<td><strong>MediaPipe 能不能处理多人</strong></td>
+<td><code>03</code> L16 表格：MediaPipe Pose "❌ 单主体"；但 L137/L8 又把它作为<strong>第一周入门主力</strong>，且目标场景写的是"2-4 人"。<code>04</code> L82 用 <code>num_poses=1</code>。<code>06</code> L137 又把它列为姿态选项之一</td>
+<td>表格正确、推荐路径与场景不匹配。<code>03</code> L137 应改写为"第一周只用来<strong>熟悉骨架概念</strong>，它的输出<strong>不能</strong>进入双打/多人的正式管线"</td>
+</tr>
+<tr>
+<td>C7</td>
+<td><strong>采样帧率</strong></td>
+<td><code>02</code> L44：抽帧"每 0.5 秒一帧（<strong>2 fps</strong>）"。<code>06</code> L136：分析用"<strong>10–15 fps</strong> 足够"。<code>04</code> L92：手腕速度逐帧差分（隐含全帧率）</td>
+<td><code>02</code> 的 2fps 只适合<strong>静态标注</strong>，而 <code>04</code> 的击球检测依赖逐帧手腕速度——两者若混用，<code>04</code> 的峰值检测在 2fps 上完全失效。需在 <code>02</code> 加注："2fps 仅用于抽样标注，时序特征必须回到原帧率或 ≥30fps"</td>
+</tr>
+<tr>
+<td>C8</td>
+<td><strong><code>06</code> 与 <code>05</code> 对 BST 的定位</strong></td>
+<td><code>06</code> L139 把 BST 列为流水线"可选第 4 步"，并称"骨架动作识别是这条路线上<strong>最成熟的公开范式</strong>"。<code>05</code> L32 引同一篇论文，却强调其难点与"通用骨架动作识别模型会把不同挥拍动作糊成'击球'一类"</td>
+<td><code>05</code> 的限定更准确（<code>06</code> 的"最成熟"忽略了 BST 论文自述的困难）。<code>06</code> 应删"最成熟"，改为"当前公开的羽毛球专项 SOTA 尝试，但需注意其自述的类间混淆问题"</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="三明显缺口针对羽毛球运动表现分析这一目标">三、明显缺口（针对"羽毛球运动表现分析"这一目标）</h2>
+<p><strong>G1｜球（shuttle）这条主线整体缺失 —— 最高优先级缺口</strong>
+<code>02</code> 之外无人提球；<code>02</code> 提了但用错方法。后果：<strong>击球帧、击球点高度、落点、球速、回合节奏</strong>这五个最贴近"运动表现"的量，全套笔记里没有可靠来源。<code>05</code> 引 BST 时其实已经说出答案——"<strong>球轨迹是主线索而非辅助</strong>"——却只在 L69 提了一句"不要同时塞进显存"。建议：新增独立笔记《07-球轨迹追踪与击球事件检测》，以 TrackNetV3 + InpaintNet 为核心，并明确"InpaintNet 修复段的速度是插值出来的，不能算球速"（<code>05</code> L81 已有此警告，需上移为主线约束）。</p>
+<p><strong>G2｜单应变换/场地标定只有"必须做"，没有"怎么做"</strong>
+<code>02</code> L103、<code>05</code> L72、<code>06</code> L15/L141 三处都指出"像素≠米、必须做场地标定"，但<strong>没有任何一处给出实现</strong>：球场线检测（Hough/直线拟合）、四点对应、<code>cv2.findHomography</code>、重投影误差检查、<code>cv2.perspectiveTransform</code> 换算。同时<strong>缺少标定所需的真值尺寸</strong>：羽毛球场地 <strong>13.40 m × 6.10 m（双打）/ 5.18 m（单打宽）</strong>、网高 <strong>1.524 m（中央）/ 1.55 m（网柱）</strong>。没有这些数字，<code>05</code> 里"击球点坐标（单打场地 13.4m×6.1m 单应变换得来）"就无法复现。</p>
+<p><strong>G3｜验证协议与指标可信度评估完全空白</strong>
+<code>02</code> 讲了训练集的 train/val 划分，<code>04</code> 讲了 <code>GroupKFold</code>，但<strong>没有一处回答"算出来的这个数字可信到什么程度"</strong>：缺重投影/关键点误差的量化、缺同一球员两次拍摄的重复性检验、缺"角度指标 ±X° 内不做结论"的阈值约定、缺带标注真值的 sanity check 设计。<code>05</code> 用一整节论证"单目算不出真值"，却没有顺势给出"那可信区间是多少"。这是本套笔记从"技术笔记"升级为"分析报告"的必要一环。</p>
+<p><strong>G4｜单打/双打模式未区分</strong>
+6 份全部混谈"2-4 人"。单双打的跑动范围、站位、击球类型分布、评价格局完全不同（<code>05</code> 的 ShuttleSet 是<strong>单打</strong>数据集，能否迁移到双打未讨论）。<code>03</code> 直接把"羽毛球双打交叉换位"当作 bottom-up 的失败案例，<code>05</code> 又把双打列为泛化难点。需要一条明确的"先锁定单打做通"或"分模式建模"的决策。</p>
+<p><strong>G5｜多模态输入只提了骨架</strong>
+<code>04</code> L138 提了"用击球声粗标"，但没有任何一份笔记展开音频模态——而击球声检测（onset detection）是<strong>最廉价、最可靠的击球时刻标签来源</strong>，恰好能补 G1 的缺口。同理未提：球员检测框与球轨迹的时空关联、场地线作为静态先验。</p>
+<p><strong>G6｜中文术语 ↔ 数据集标签体系没有落地</strong>
+<code>05</code> L27 列出了对应关系（搓球→net shot、推球→push、扑球→rush、挑球→lob、吊球→drop），但<strong>只给了 5 个例子、没给完整映射表</strong>，且同段先说"18 类"再列举时只列出 17 个（漏 <code>defensive return lob</code>）。训练一个能对上中文教练话术的分类器，这张表是必需品。</p>
+<p><strong>G7｜球员个体基线与纵向对比缺失</strong>
+"运动表现分析"的本质是<strong>与自己的历史比较</strong>。<code>06</code> L130 虽然设计了 <code>outputs/&lt;session_id&gt;/</code> 的目录结构，但没有定义任何跨 session 的基线/归一化（如按身高、按赛季、按同一机位标定后的相对量），也没有<code>04</code> 那种特征的参考区间。缺了这层，"你肘角比模板小 15°"这类结论无法稳定成立。</p>
+<p><strong>G8｜训练/评估的会话级泄漏在工程侧没有防线</strong>
+<code>02</code> L107 与 <code>05</code> L71 都警告"不能按帧随机划分"，<code>04</code> L143 也要求 <code>GroupKFold</code>，但 <code>06</code> 的 <code>01_extract.py</code> 流水线（L136）<strong>没有任何 group/session 标记落盘的设计</strong>，中间产物也不带 session id 到特征层。正确做法要在数据抽取阶段就强制写入 <code>session_id</code> / <code>player_id</code> 列。</p>
+<hr>
+<h2 id="四修正建议逐条对应到文件名">四、修正建议（逐条对应到文件名）</h2>
+<h3 id="01-YOLO技术全景与硬件选型md">01-YOLO技术全景与硬件选型.md</h3>
+<ol>
+<li><strong>L7 / L77 版本建议改为</strong>："新项目直接用 <code>yolo26n-pose.pt</code>（同 2.9M 参数，COCO keypoints mAP50-95 57.2 vs YOLO11n-pose 的 50.0）；<code>yolo11n-pose.pt</code> 作为生态资料更全的回退选项。"理由与数据见 <a href="https://docs.ultralytics.com/tasks/pose/">Pose 文档模型表</a>。</li>
+<li><strong>L41 修正单位为</strong>：<code>yolo26n-pose 2.9M 参数 / 7.6 GFLOPs / mAP50-95 57.2</code>；YOLO11-pose 一行的 GFLOPs 与 mAP 分列，避免把 57.2（mAP）读成 FLOPs。</li>
+<li><strong>L7 / L36 的"算关节角度"必须加限定</strong>："关键点→角度只能得到<strong>画面投影角</strong>；单目视角下髋/膝角存在约 10° 量级的系统性低估（见笔记 05 L38），报告里必须标注坐标系与误差量级，不得直接当作生物力学真值。"</li>
+<li><strong>L24 许可证两句话择一</strong>：删除"完全开源项目免费"这一条，或改写为"自己学习/课程作业/纯学术对照 → 免费；<strong>任何对外提供的产品、服务、SaaS、内部工具，以及微调权重的商用，均需 Enterprise 授权</strong>"。</li>
+<li><strong>L16 归属修正</strong>：<code>YOLOv9</code> 改为"中科院大学（UCAS）Wang 等"；<code>YOLOv6</code> 保留美团，<code>YOLO12</code> 补一句"Buffalo 大学 + 国科大"，<code>YOLO-NAS</code> 注"Deci AI，已被 NVIDIA 收购"。</li>
+</ol>
+<h3 id="02-YOLO自定义数据集与训练全流程md">02-YOLO自定义数据集与训练全流程.md</h3>
+<ol start="6">
+<li><strong>开篇加边界声明</strong>："本篇覆盖 <strong>detect</strong> 的自定义数据集全流程；羽毛球运动表现分析的最终指标必须走 <strong>pose</strong>（见 01/03），两者不要混用。"</li>
+<li><strong>L5 / L100 删去 <code>shuttle</code> 类别建议</strong>，改为指路："球的追踪请走热图回归路线（TrackNetV2/V3），不要用检测框标球——640 下羽毛球只有几个像素，框标注既费时又不稳，详见笔记 05 L22/L69 与新增的 07。"</li>
+<li><strong>L44 加注采样约束</strong>："2 fps 仅用于<strong>抽样标注</strong>；任何速度/峰值类时序特征（笔记 04 的手腕速度击球检测）必须回到原帧率或 ≥30 fps 处理。"</li>
+<li><strong>L88-92 补全 <code>model=</code> 的真实路径</strong>，不要留 <code>...</code>。</li>
+<li><strong>L11 把类别从 0 开始的规则前置</strong>，并在示例行后加注释。</li>
+<li><strong>新增一节"许可证"</strong>：注明 <code>ultralytics</code> 及官方权重为 AGPL-3.0，微调权重商用同样触发义务。</li>
+<li><strong>L16 X-AnyLabeling 引用改为一手来源</strong>（GitHub Releases），微信文章仅作补充。</li>
+</ol>
+<h3 id="03-姿态估计技术全景md">03-姿态估计技术全景.md</h3>
+<ol start="13">
+<li><strong>L132 修正参数量</strong>：<code>yolo26m-pose</code> = 21.5M（25.9M 是 <code>l</code>）；同时删去与 YOLO11 的混列，或统一补上 YOLO11 各档。</li>
+<li><strong>L137 改写 MediaPipe 定位</strong>："第一周仅用于<strong>理解 33 点骨架与 <code>world_landmarks</code> 概念</strong>；它是单主体方案，输出<strong>不得</strong>进入 2–4 人的正式管线（表格 L16 已注明单主体，此处与场景冲突）。"</li>
+<li><strong>L158 补充版本表</strong>：把 YOLO11-pose 与 YOLO26-pose 的 n/s/m 参数与 mAP 并列成小表，避免与 <code>01</code>/<code>05</code> 的口径继续漂移。可复用 <a href="https://docs.ultralytics.com/tasks/pose/">Pose 官方表</a>。</li>
+<li><strong>L29 的结论需要重算</strong>："RTMPose-m 精度明显高于 YOLO-pose-n/s，但仍低于 YOLO26m-pose"——按官方数字复述时请把<strong>输入分辨率与测试协议</strong>一并列出（RTMPose 多基于 256×192 单人框输入，与 640 全图 YOLO 不同量纲），否则这个比较不成立。</li>
+<li><strong>L127 补充依赖冲突警告</strong>：<code>mediapipe 1.0.1</code> 依赖 <code>opencv-contrib-python</code>，与 <code>opencv-python</code> / <code>opencv-python-headless</code> <strong>不可共存</strong>（同名 <code>cv2</code> 命名空间），装前先 <code>pip uninstall</code> 多余的那个。</li>
+<li><strong>新增 3D 一节的最小可用替代</strong>：既然单目 3D 不划算，明确写"绕纵轴旋转类指标在单机位下<strong>直接不做</strong>"，而不是留给读者自行判断（呼应 <code>05</code> L90 的提示词）。</li>
+</ol>
+<h3 id="04-骨架时序分析与动作识别md">04-骨架时序分析与动作识别.md</h3>
+<ol start="19">
+<li><strong>L56-58 PyTorch / CUDA 口径统一</strong>：明确推荐一套组合（如 torch cu128 + onnxruntime-gpu 1.30，或 torch cu124 + ORT-GPU 1.2x），并注明 ORT-GPU 1.30 已对齐 <strong>CUDA 13</strong>，不要与 cu124 混装。</li>
+<li><strong>L64 xgboost 版本号更新</strong>为"3.4.x（最新）"或直接不写版本。</li>
+<li><strong>L113-114 MMAction2 命令二选一</strong>：保留 <code>pip install mmaction2</code> 就改用 <code>mim train mmaction2 &lt;config&gt;</code>；要跑 <code>tools/train.py</code> 就明确"先 <code>git clone</code> 并 <code>cd</code> 进仓库"。</li>
+<li><strong>L31 删去"10 clips 测试协议"</strong>或标注未核实；表头"NTU60 XSub"与正文"8×GPU、100 帧"保持一致即可。</li>
+<li><strong>L101-103 DTW 代码修正</strong>：对<strong>多变量</strong>序列用 <code>dtw.distance_fast</code> 时不应 <code>ravel()</code> 后当一维处理。改为逐维求和（<code>dtw.distance_fast(a[:, d], b[:, d])</code> 累加）或使用 <code>dtaidistance.dtw_ndim.distance_fast</code>；同时核对 <code>use_pruning</code> 是否为 <code>distance_fast</code> 的合法关键字（<code>dtw.distance</code>/<code>dtw_ndim</code> 中确认后再写）。</li>
+<li><strong>L117 的 PYSKL 版本表述</strong>改为"PYSKL 论文（arXiv 2205.09443）"，删"v0.2"。</li>
+<li><strong>新增一节"与 05 的指标边界对齐"</strong>：把"哪些量单目算不出"（躯干旋转、肩内旋、鞭打时序的绝对量）在本文档里也复述一次，避免只读 04 的人直接去算角速度绝对值。并注明"跨 session 比较需先做基线与尺度归一化"（对应 G7）。</li>
+</ol>
+<h3 id="05-羽毛球专项研究与数据集md">05-羽毛球专项研究与数据集.md</h3>
+<ol start="26">
+<li><strong>L27 分类数修正</strong>：确认是 18 类后<strong>列全</strong>（当前列表只有 17 项，漏 <code>defensive return lob</code>）；并补一张<strong>中文 ↔ 标签的完整映射表</strong>（杀球=smash、点杀/腕杀=wrist smash、高远球=clear、吊球=drop、挑球=lob、搓球=net shot、推球=push、扑球=rush、平抽=drive、发短球=short service…），这是本套笔记里唯一能直接对接中文教练话术的资产，值得单独成节。</li>
+<li><strong>L22 TrackNetV3 权重名与命令标注"待仓库核对"</strong>：L62 已诚实声明"没能读到 README 全文"，请在 L22 的表格里对 <code>ckpts/TrackNet_best.pt</code> / <code>ckpts/InpaintNet_best.pt</code> 加同样的未核实标记，不要只标在命令块。</li>
+<li><strong>L62 的受限说明补一条可执行替代</strong>："若本机同样无法访问 GitHub，可用 <code>https://raw.githubusercontent.com/.../README.md</code> 或镜像站，或直接 <code>pip download</code> 后读包内文档"——避免读者卡在同一处。</li>
+<li><strong>L38 的 Frontiers 引用标注"待复核"</strong>（DOI <code>10.3389/fspor.2026.1831625</code> 未能打开正文逐字验证）。</li>
+<li><strong>L8 的一句话说死了"算不出真值"，建议补充出口</strong>：加一句"因此本项目的输出定位是<strong>画面投影指标的纵向对比</strong>，而不是生物力学测量"，把定性与可交付物对齐。</li>
+<li><strong>L68 参数表修正</strong>：<code>yolo26s-pose</code> = 10.4M（去掉误配的 2.9M），并补 <code>yolo26n-pose</code> = 2.9M。</li>
+<li><strong>新增一节"从球轨迹到羽毛球指标的数据契约"</strong>：定义 TrackNetV3 输出（逐帧球坐标 + 置信度）如何与球员骨架、场地单应矩阵在时间轴上对齐（时间戳/帧号主键），以及<strong>哪几个指标依赖球轨迹</strong>（击球时刻、击球点高度、落点、回合节奏）。这一节直接填补 G1。</li>
+</ol>
+<h3 id="06-工程实现与可视化部署md">06-工程实现与可视化部署.md</h3>
+<ol start="33">
+<li><strong>L137 / L8 的默认姿态模型统一</strong>为 <code>yolo26n-pose.pt</code>（与 01/03/05 修订后口径一致），保留 <code>yolo11n-pose.pt</code> 作回退；项目结构 L122 的 <code>weights/yolo11n-pose.pt</code> 同步改。</li>
+<li><strong>L96 的 <code>joint_angle</code> 加坐标系警告</strong>：该函数吃的是像素坐标，输出是<strong>2D 投影角</strong>；函数 docstring 与报告模板里都要写"投影角（非生物力学真值）"，并建议至少按肩宽/髋宽做尺度归一化后再入报告（呼应 <code>03</code> L157）。</li>
+<li><strong>L29 只保留一个 OpenCV 包</strong>：删除 <code>opencv-python</code> 与 headless 并存的做法（或用 environment marker 明确区分机器），并在 L154 的"常见坑"里补一条：<strong>mediapipe 会带 <code>opencv-contrib-python</code>，与本机 <code>opencv-python</code> 冲突</strong>，症状是版本被静默替换。</li>
+<li><strong>新增"许可证"一节</strong>：本笔记是部署篇，必须回答"这个报告系统对外提供服务时 AGPL-3.0 意味着什么"，并区分 <code>ultralytics</code>(AGPL-3.0) / <code>opencv-python</code>(MIT 包装 + Apache-2.0 本体) / <code>gradio</code>(Apache-2.0) 等。这是当前唯一一份完全不提许可证的笔记。</li>
+<li><strong>L139 BST 表述降级</strong>："骨架动作识别是这条路上<strong>最成熟的公开范式</strong>"改为"<strong>当前公开的羽毛球球路分类 SOTA 尝试</strong>；注意 BST 论文自述通用骨架模型会把不同挥拍动作混淆（见笔记 05 L32）"。</li>
+<li><strong>L141 五个建议指标全部补"可信度附注"</strong>：每条标注坐标系（像素/场地米）、是否为投影角、以及"未做场地标定时该指标不可解释"。同时补上<strong>跨 session 归一化</strong>的说明（G7）。</li>
+<li><strong>L136 流水线新增 group 字段</strong>：<code>01_extract.py</code> 输出必须带 <code>session_id</code> / <code>player_id</code>，<code>metrics.csv</code> 与 <code>.npz</code> 同步保留，供 <code>04</code> 的 <code>GroupKFold</code> 与 <code>05</code> 的"按比赛/选手切分"直接消费（G8）。</li>
+<li><strong>L163 / L180 引用检查</strong>：<code>https://ieeexplore.ieee.org/document/10226183/metrics#metrics</code> 的 <code>#metrics</code> 锚点与 <code>frontiersin.org/.../10.3389/fspor.2026.1753118/full</code> 建议改为标准 DOI/摘要页链接并标注"待复核"。</li>
+</ol>
+<h3 id="跨笔记建议新增第-78-份笔记">跨笔记（建议新增第 7、8 份笔记）</h3>
+<ol start="41">
+<li><strong>《07-球轨迹追踪与击球事件检测》</strong>：TrackNetV2/V3 + InpaintNet、热图回归 vs 检测框的取舍、击球时刻的三种对齐信号（球轨迹转折、手腕速度峰值、击球声 onset）、以及"哪些指标依赖球轨迹"的数据契约。（补 G1、G5）</li>
+<li><strong>《08-场地标定与时序验证协议》</strong>：球场线检测 → 四点对应 → <code>cv2.findHomography</code> + 重投影误差 → 像素↔米换算；标定真值（13.40×6.10 m、网高 1.524/1.55 m）；以及指标可信度协议（关键点/重投影误差、重复性质检、<code>session_id</code> 强制字段、跨 session 归一化）。这一份同时收口 G2、G3、G7、G8。</li>
+<li><strong>统一"版本与许可"速查表</strong>放到 <code>README</code>：把 6 份里出现的每个库/模型/数据集的<strong>当前版本、许可、一手来源链接</strong>集中成一张表（本次已核实项可直接搬入），从机制上防止各篇口径再次漂移。</li>
+</ol>
+<hr>
+<h2 id="五审校方法与局限">五、审校方法与局限</h2>
+<ul>
+<li>只复核了<strong>可外部验证的硬断言</strong>（版本号、模型名、参数、许可证、数据集规模、论文存在性、命令语法）。<strong>未复核</strong>：各类精度数字的原始实验条件、<code>05</code> 中生物力学误差数字的原文细节、TrackNetV3 仓库的权重文件名与 <code>train.py</code> 参数（受网络限制，见 <code>05</code> L62 的自述）。</li>
+<li>本次核实使用的关键来源：<a href="https://docs.ultralytics.com/tasks/pose/">Ultralytics Pose 文档</a>、<a href="https://docs.ultralytics.com/models/yolo26/">YOLO26</a>、<a href="https://docs.ultralytics.com/models/yolo27/">YOLO27</a>、<a href="https://docs.ultralytics.com/models/yolo12/">YOLO12</a>、<a href="https://docs.ultralytics.com/models/yolo11/">YOLO11</a>、<a href="https://docs.ultralytics.com/modes/track/">Track 模式</a>、<a href="https://newreleases.io/project/pypi/ultralytics/release/8.4.153">ultralytics 8.4.153 发布说明</a>、<a href="https://pypi.org/project/onnxruntime-gpu/">onnxruntime-gpu PyPI</a>、<a href="https://pypi.org/project/opencv-python/">opencv-python PyPI</a>、<a href="https://pypi.org/project/mediapipe/">mediapipe PyPI</a>、<a href="https://newreleases.io/project/pypi/xgboost/release/3.1.0">xgboost 3.1.0</a>、<a href="https://arxiv.org/abs/2306.04948">ShuttleSet (arXiv 2306.04948)</a>、<a href="https://openaccess.thecvf.com/content/CVPR2026W/CVsports/html/Chang_BST_Badminton_Stroke-type_Transformer_for_Skeleton-based_Action_Recognition_in_Racket_CVPRW_2026_paper.html">BST (CVPRW 2026)</a>、<a href="https://dl.acm.org/doi/10.1145/3772318.3790998">BadminSense (CHI 2026)</a>、<a href="https://www.yonex.com/news/badminton/rankireddy-and-tan-smash-guinness-world-records-title-with-the-fastest-badminton-hits/">最快速击球 565 km/h</a>。</li>
+<li><strong>未打开全文、仅依据搜索结果判定的项</strong>：<code>05</code> L38 的 Frontiers 文章、<code>06</code> L141 的 Frontiers 与 IEEE 文章、<code>02</code> 的 X-AnyLabeling 3.0 微信发布说明。这些在文中已标注"待复核"，请在使用前自行打开确认。</li>
+</ul>
+<div class="pager">
+<a class="prev" href="preset-coach.html"><span class="lbl">上一篇</span><span class="ttl">示例 agent 预设</span></a>
+<a class="next" href="research-01.html"><span class="lbl">下一篇</span><span class="ttl">调研 01 · YOLO 全景</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

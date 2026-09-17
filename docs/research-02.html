@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>调研 02 · 数据集与训练 · 羽毛球 AI 教练</title>
+<meta name="description" content="抽帧、标注、data.yaml、训练参数、指标解读。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html" class="current">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">代码与资料</span></div>
+<h1 id="YOLO-自定义数据集与训练全流程面向羽毛球运动表现分析">YOLO 自定义数据集与训练全流程（面向羽毛球运动表现分析）</h1>
+<h2 id="一句话结论">一句话结论</h2>
+<p>从 0 到第一个能用的模型，最短路径是：<strong>自己录 3–5 段羽毛球视频 → ffmpeg 按 2 fps 抽帧 + 去重 → X-AnyLabeling 标 3 类（player / racket / shuttle）约 300–500 张 → <code>yolo detect train model=yolo26n.pt</code> 在 8GB 显存上用 <code>imgsz=640 batch=8</code> 训 100–150 轮</strong>，命令全部来自 Ultralytics 官方文档，不需要自己写训练代码。</p>
+<h2 id="核心概念">核心概念</h2>
+<ul>
+<li><strong>Ultralytics 版本现状</strong>：目前官方主线模型家族是 <strong>YOLO26</strong>（<code>yolo26n.pt</code> … <code>yolo26x.pt</code>），YOLO11 仍受支持，<strong>YOLO27 官方标注为"The models are not yet available"</strong>，不要用 <code>yolo27n.pt</code> 这种文件名（<a href="https://docs.ultralytics.com/zh/models/">模型总览</a>）。</li>
+<li><strong>两种数据来源</strong>：公开数据集（COCO/VOC/VisDrone，或 Roboflow Universe 上别人导出的羽毛球/球拍数据集）省标注但<strong>场景和你自己的球馆、机位不匹配</strong>；自己录视频抽帧最贴合实际，代价是标注时间。羽毛球建议后者，且必须覆盖：白天/夜间灯光、近景/远景、左右半场、单打/双打。</li>
+<li><strong>YOLO txt 标注格式</strong>：一行一个目标，<code>class_id cx cy w h</code>，后四个都是 <strong>0–1 归一化</strong>数字（相对整张图宽高），不是像素。真实例子——1920×1080 帧里一名球员框为 <code>(x1=640, y1=200, x2=800, y2=900)</code>：cx=(640+800)/2/1920=0.375，cy=(200+900)/2/1080=0.509，w=160/1920=0.083，h=700/1080=0.648，于是该行写成 <code>0 0.375 0.509 0.083 0.648</code>；类别后面用空格分隔（<a href="https://docs.ultralytics.com/zh/datasets/detect/">数据集格式说明入口</a>）。</li>
+<li><strong>标注工具现状</strong>（新手最省事 → 专业）：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>形态</th>
+<th>优劣</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>X-AnyLabeling</strong></td>
+<td>本地桌面（Python）</td>
+<td>内置 SAM / Grounding 类模型做<strong>半自动预标注</strong>，导出 YOLO txt；对新手最省事。3.0 版本加入 Qwen3-VL、SAM3 与远程推理（<a href="https://mp.weixin.qq.com/s/hKy4oud3IECZTk1N3mMxmQ">发布说明</a>、<a href="https://github.com/CVHub520/X-AnyLabeling">仓库</a>）</td>
+</tr>
+<tr>
+<td><strong>Roboflow</strong></td>
+<td>网页</td>
+<td>浏览器里标完一键导出 YOLO 格式，团队协作好；免费额度有限，数据在云上</td>
+</tr>
+<tr>
+<td><strong>labelme</strong></td>
+<td>本地桌面</td>
+<td>经典、教程最多，但只有多边形/矩形框，格式是 JSON，要写脚本转 YOLO，无 AI 辅助</td>
+</tr>
+<tr>
+<td><strong>CVAT</strong></td>
+<td>自托管/在线</td>
+<td>视频逐帧标注、多人审核最强；Docker 部署对新手偏重</td>
+</tr>
+<tr>
+<td><strong>Label Studio</strong></td>
+<td>自托管/在线</td>
+<td>支持文本/音频/图像多模态流水线，做纯目标检测比前两个绕</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong><code>data.yaml</code> 怎么写</strong>（路径建议写绝对路径，避免 YAML 相对路径的坑）：</li>
+</ul>
+<p><code>yaml
+  path: D:/datasets/badminton      # 数据集根目录
+  train: images/train               # 相对 path
+  val: images/val
+  names:
+    0: player
+    1: racket
+    2: shuttle</code></p>
+<p>目录结构必须是 <code>images/train</code> 与 <code>labels/train</code> <strong>同名同目录层级</strong>，图片 <code>a.jpg</code> 对应标签 <code>a.txt</code>，没有目标的图<strong>可以没有 txt，但不能有空的错位文件</strong>。
+- <strong>指标怎么读</strong>：<code>Box(P, R, mAP50, mAP50-95)</code> 中 P=精确率（误检少）、R=召回率（漏检少）、<strong>mAP50 是 IoU=0.5 下的均值，偏"检测得到"；mAP50-95 在 0.5–0.95 多阈值取平均，偏"框得准不准"</strong>。羽毛球场景：可以先看 mAP50 是否 &gt;0.8，再看 mAP50-95；shuttle 这类小目标 mAP50-95 通常明显低于 player（<a href="https://docs.ultralytics.com/zh/guides/yolo-performance-metrics/">性能指标指南</a>）。</p>
+<h2 id="可执行的最短路径真实命令">可执行的最短路径（真实命令）</h2>
+<div class="codehilite"><pre data-lang="bash"><span></span><code><span class="c1"># 1) 环境（Windows 建议独立 venv）</span>
+pip<span class="w"> </span>install<span class="w"> </span>ultralytics<span class="w">            </span><span class="c1"># 会自动带上 torch 等依赖</span>
+
+<span class="c1"># 2) 抽帧：每 0.5 秒一帧（2 fps），输出连续编号</span>
+ffmpeg<span class="w"> </span>-i<span class="w"> </span>raw.MP4<span class="w"> </span>-vf<span class="w"> </span><span class="nv">fps</span><span class="o">=</span><span class="m">2</span><span class="w"> </span>-q:v<span class="w"> </span><span class="m">2</span><span class="w"> </span>frames/f_%05d.jpg
+
+<span class="c1"># 只要"画面变化明显"的帧（羽毛球动作快、静帧多时更省标注量）</span>
+ffmpeg<span class="w"> </span>-i<span class="w"> </span>raw.MP4<span class="w"> </span>-vf<span class="w"> </span><span class="s2">"select='gt(scene,0.08)',fps=2"</span><span class="w"> </span>-vsync<span class="w"> </span>vfr<span class="w"> </span>-q:v<span class="w"> </span><span class="m">2</span><span class="w"> </span>frames/s_%05d.jpg
+</code></pre></div>
+
+<p>抽完帧后<strong>务必去重</strong>（否则相邻帧几乎一样，等于白标）：先用 <code>opencv-python</code> 计算每帧 dHash 或用直方图/SSIM 与上一张比较，相似度超过阈值就丢弃；也可以用 <code>video-to-keyframes</code> 这类现成工具（<a href="https://github.com/davidj-brewster/video-to-keyframes">参考</a>）。OpenCV 版核心是 <code>cv2.VideoCapture</code> 循环 <code>read()</code> 后按帧号取模保存，不要一天抽几万帧——羽毛球单类 300–500 张就能出可用效果。</p>
+<div class="codehilite"><pre data-lang="bash"><span></span><code><span class="c1"># 3) 标注后按 8:2 划分，并用官方脚本核对标签（可选但强烈建议）</span>
+<span class="c1">#    训练</span>
+yolo<span class="w"> </span>detect<span class="w"> </span>train<span class="w"> </span><span class="nv">model</span><span class="o">=</span>yolo26n.pt<span class="w"> </span><span class="nv">data</span><span class="o">=</span>D:/datasets/badminton/data.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="nv">epochs</span><span class="o">=</span><span class="m">150</span><span class="w"> </span><span class="nv">imgsz</span><span class="o">=</span><span class="m">640</span><span class="w"> </span><span class="nv">batch</span><span class="o">=</span><span class="m">8</span><span class="w"> </span><span class="nv">device</span><span class="o">=</span><span class="m">0</span><span class="w"> </span><span class="nv">workers</span><span class="o">=</span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="nv">project</span><span class="o">=</span>runs/badminton<span class="w"> </span><span class="nv">name</span><span class="o">=</span>v1<span class="w"> </span><span class="nv">patience</span><span class="o">=</span><span class="m">40</span>
+
+<span class="c1"># 4) 验证与推理</span>
+yolo<span class="w"> </span>detect<span class="w"> </span>val<span class="w"> </span><span class="nv">model</span><span class="o">=</span>runs/badminton/v1/weights/best.pt<span class="w"> </span><span class="nv">data</span><span class="o">=</span>D:/datasets/badminton/data.yaml
+yolo<span class="w"> </span>predict<span class="w"> </span><span class="nv">model</span><span class="o">=</span>runs/badminton/v1/weights/best.pt<span class="w"> </span><span class="nv">source</span><span class="o">=</span>test.mp4<span class="w"> </span><span class="nv">save</span><span class="o">=</span>True
+
+<span class="c1"># 5) 断点续训（关键：resume 必须指向 last.pt）</span>
+yolo<span class="w"> </span>detect<span class="w"> </span>train<span class="w"> </span>resume<span class="w"> </span><span class="nv">model</span><span class="o">=</span>runs/badminton/v1/weights/last.pt
+</code></pre></div>
+
+<p>Windows 上如果写成 <code>.py</code> 脚本调用，必须在文件里加 <code>if __name__ == "__main__":</code>，否则会报多进程 <code>RuntimeError</code>（<a href="https://docs.ultralytics.com/zh/modes/train/">官方训练文档</a>）。</p>
+<p><strong>训练输出目录</strong>（<code>runs/badminton/v1/</code>）里每个文件是什么：</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>weights/best.pt</code></td>
+<td>验证指标<strong>最优</strong>那一轮的权重，部署/推理只用它</td>
+</tr>
+<tr>
+<td><code>weights/last.pt</code></td>
+<td>最后一个 epoch 的权重，含优化器状态，<strong>resume 用它</strong></td>
+</tr>
+<tr>
+<td><code>results.csv</code></td>
+<td>每轮 loss 与指标，判断过拟合/欠拟合的一手数据</td>
+</tr>
+<tr>
+<td><code>confusion_matrix.png</code> / <code>confusion_matrix_normalized.png</code></td>
+<td>混淆矩阵，看哪两类互相误判（如 racket 被判成 player）</td>
+</tr>
+<tr>
+<td><code>BoxPR_curve.png</code> / <code>BoxF1_curve.png</code></td>
+<td>PR 曲线与 F1 曲线，用来挑置信度阈值</td>
+</tr>
+<tr>
+<td><code>labels.jpg</code> / <code>labels_correlogram.jpg</code></td>
+<td>标注框分布，检查标注是否严重失衡</td>
+</tr>
+<tr>
+<td><code>train_batch*.jpg</code> / <code>val_batch*_pred.jpg</code></td>
+<td>增强后的训练样本与验证集预测可视化</td>
+</tr>
+<tr>
+<td><code>args.yaml</code></td>
+<td>本次全部超参，复现实验靠它</td>
+</tr>
+</tbody>
+</table>
+<p><strong>过拟合 vs 欠拟合</strong>（看 <code>results.csv</code>）：训练 loss 持续下降而验证 mAP 早早平台化甚至下滑=过拟合，办法是加数据、加强增强、<code>patience</code> 早停、减小模型（n/s）；训练 loss 和验证指标都很差且不降=欠拟合，办法是加轮数、检查标注是否正确、确认 <code>data.yaml</code> 的 names 与 txt 里的 class_id 对得上。</p>
+<p><strong>数据增强参数</strong>（默认值可用 <code>yolo checks</code> 或查看安装包内 <code>ultralytics/cfg/default.yaml</code> 核对你的版本）：常用的是 <code>mosaic</code>（四图拼接，对小目标友好）、<code>mixup</code>、<code>copy_paste</code>、<code>hsv_h/hsv_s/hsv_v</code>（色调/饱和度/亮度）、<code>degrees</code>、<code>translate</code>、<code>scale</code>、<code>fliplr</code>（左右翻转）、<code>close_mosaic</code>（最后 N 轮关掉 mosaic 稳定收敛）。<strong>羽毛球注意</strong>：<code>fliplr=0.5</code> 通常没问题，但如果你的任务是判断"左手/右手持拍"或球场方位有语义，翻转会破坏语义；<code>mosaic</code> 默认开启是双刃剑，小球容易被拼到画面边缘。</p>
+<p><strong>导出命令与取舍</strong>：</p>
+<div class="codehilite"><pre data-lang="bash"><span></span><code>yolo<span class="w"> </span><span class="nb">export</span><span class="w"> </span><span class="nv">model</span><span class="o">=</span>runs/badminton/v1/weights/best.pt<span class="w"> </span><span class="nv">format</span><span class="o">=</span>onnx<span class="w">        </span><span class="c1"># 通用、跨平台</span>
+yolo<span class="w"> </span><span class="nb">export</span><span class="w"> </span><span class="nv">model</span><span class="o">=</span>...<span class="w"> </span><span class="nv">format</span><span class="o">=</span>openvino<span class="w">                                   </span><span class="c1"># Intel/CPU 部署，CPU 提速明显</span>
+yolo<span class="w"> </span><span class="nb">export</span><span class="w"> </span><span class="nv">model</span><span class="o">=</span>...<span class="w"> </span><span class="nv">format</span><span class="o">=</span>engine<span class="w">                                    </span><span class="c1"># TensorRT，N 卡上最快</span>
+</code></pre></div>
+
+<p>ONNX 兼容性最好、几乎到处能跑（但 NMS 常需自己写）；OpenVINO 面向 CPU/核显，适合没有独显的部署机；TensorRT <code>format=engine</code> 在 RTX 4060 上延迟最低，但<strong>与 TensorRT/CUDA 版本强绑定，换机器要重新导出</strong>，INT8 还需要用 <code>data=</code> 提供校准数据（<a href="https://docs.ultralytics.com/zh/modes/export/">导出文档</a>）。</p>
+<h2 id="选型建议RTX-4060-Laptop-8GB">选型建议（RTX 4060 Laptop 8GB）</h2>
+<ul>
+<li><strong>模型</strong>：先 <code>yolo26n.pt</code>（也可用同尺寸的 <code>yolo11n.pt</code>）。8GB 显存不要一上手就 <code>s</code> 或 <code>m</code>，尤其羽毛球要检测小球时你会想提高分辨率，那更吃显存。</li>
+<li><strong>epochs</strong>：100–150 起步，配 <code>patience=40</code> 早停；数据只有几百张时 300 轮以上大概率过拟合。</li>
+<li><strong>imgsz</strong>：默认 <code>640</code>。<strong>shuttle（羽毛球）在 640 下常常只有几个像素，是这类任务的最大瓶颈</strong>——先 640 跑通流程，再试 <code>imgsz=960</code> 或 <code>1280</code>，同时把 <code>batch</code> 降到 4 或 2；显存不够时用 <code>batch=-1</code> 让 Ultralytics 自动按 60% 显存选 batch。</li>
+<li><strong>batch</strong>：<code>640</code> 用 8–16（8GB 安全值是 8）；<code>960</code> 用 4；<code>1280</code> 用 2。batch 变小等效学习率降低，可把 <code>lr0</code> 略降或适当加轮数。</li>
+<li><strong>workers</strong>：Windows 上设小一点（2–4），设太大会卡在数据加载甚至报共享内存错误。</li>
+<li><strong>竞技分析的后续工程</strong>：检测只是第一步，真正的"运动表现"（跑动距离、击球点位置、回合时长）要靠 <code>yolo track</code> 得到 ID 后做轨迹统计，且必须做<strong>单应性变换（球场四点→平面）</strong>才能把像素坐标还原成米，这一步没有现成命令，需要单独写代码。</li>
+</ul>
+<h2 id="常见坑">常见坑</h2>
+<ol>
+<li><strong>数据集划分泄漏</strong>：把连续视频帧随机分到 train/val，验证集里全是训练集的"近邻帧"，mAP 虚高、上线就崩。正确做法是<strong>按视频/比赛分组划分</strong>，或每 10 帧抽 1 帧后划到 val。</li>
+<li><strong>标签格式错</strong>：忘记归一化、写成了 <code>x1 y1 x2 y2</code>、class_id 从 1 开始（YOLO 从 <strong>0</strong> 开始）、图片与 txt 文件名对不上。Ultralytics 训练时会给警告但常常不报错，只是学不出来。</li>
+<li><strong><code>data.yaml</code> 路径</strong>：训练时报 "dataset not found"，八成是相对路径基准不对或 Windows 反斜杠转义，直接写正斜杠绝对路径最省事。</li>
+<li><strong>改了数据集没删缓存</strong>：<code>labels.cache</code> 残留会导致改动不生效，删掉 <code>labels/</code> 下的 <code>*.cache</code> 再训。</li>
+<li><strong><code>resume</code> 指向 <code>best.pt</code></strong>：必须用 <code>last.pt</code>；如果换了 <code>imgsz</code>/<code>data</code> 等参数，resume 不生效，应改成"载入 best.pt 再训"。</li>
+<li><strong>过早追求 SOTA</strong>：先 640 + n 模型跑通"数据→标注→训练→推理"全链路，再谈精度。第一个模型的常见结局是 mAP50 0.6–0.8，能跑通就有价值。</li>
+<li><strong>显存爆了别硬扛</strong>：报 CUDA out of memory 时依次降 <code>batch</code> → 降 <code>imgsz</code> → 关 <code>cache</code>，不要在同一张卡上叠加跑别的任务。</li>
+</ol>
+<h2 id="参考链接">参考链接</h2>
+<ul>
+<li>Ultralytics 训练文档（中文）：https://docs.ultralytics.com/zh/modes/train/</li>
+<li>Ultralytics 配置/超参数总表（中文）：https://docs.ultralytics.com/zh/usage/cfg/</li>
+<li>Ultralytics 目标检测数据集格式（中文）：https://docs.ultralytics.com/zh/datasets/detect/</li>
+<li>Ultralytics 性能指标解读（中文）：https://docs.ultralytics.com/zh/guides/yolo-performance-metrics/</li>
+<li>Ultralytics 导出格式与量化（中文）：https://docs.ultralytics.com/zh/modes/export/</li>
+<li>Ultralytics 模型家族总览：https://docs.ultralytics.com/zh/models/</li>
+<li>Ultralytics 超参数调优与增强搜索空间（中文）：https://docs.ultralytics.com/zh/guides/hyperparameter-tuning/</li>
+<li>X-AnyLabeling 仓库：https://github.com/CVHub520/X-AnyLabeling</li>
+<li>X-AnyLabeling 3.0 发布说明：https://mp.weixin.qq.com/s/hKy4oud3IECZTk1N3mMxmQ</li>
+<li>labelme 仓库：https://github.com/wkentaro/labelme</li>
+<li>CVAT 官网：https://www.cvat.ai/</li>
+<li>Label Studio 官网：https://labelstud.io/</li>
+<li>Roboflow：https://roboflow.com/</li>
+<li>video-to-keyframes（关键帧抽取工具）：https://github.com/davidj-brewster/video-to-keyframes</li>
+<li>ultralytics 版本发布记录（核对最新版本号）：https://github.com/ultralytics/ultralytics/releases</li>
+</ul>
+<h2 id="给-AI-编程助手的提示词">给 AI 编程助手的提示词</h2>
+<div class="codehilite"><pre><span></span><code>我在做羽毛球视频的 YOLO 目标检测（RTX 4060 Laptop 8GB）。请先确认我用的 ultralytics 版本和可用的模型文件名
+（当前主线是 yolo26n.pt/yolo11n.pt，YOLO27 尚未发布，不要编造模型名），再给我命令。
+数据方面：我会用 ffmpeg 抽帧，请帮我写去重脚本，并强调必须按视频/比赛分组划分 train/val，不能把连续帧随机分。
+检查项：标签必须是 `class cx cy w h` 且四个坐标 0–1 归一化、class 从 0 开始、图片与 txt 同名、data.yaml 用绝对路径。
+会踩的坑：Windows 要 if __name__ == "__main__"、改数据后删 labels.cache、resume 必须用 last.pt、显存不够先降 batch 再降 imgsz。
+不要一次给我完整项目，先给能跑通的最小命令，等我贴报错再改。
+</code></pre></div>
+<div class="pager">
+<a class="prev" href="research-01.html"><span class="lbl">上一篇</span><span class="ttl">调研 01 · YOLO 全景</span></a>
+<a class="next" href="research-03.html"><span class="lbl">下一篇</span><span class="ttl">调研 03 · 姿态估计</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

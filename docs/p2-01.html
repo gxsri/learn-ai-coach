@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>总览与技术路线 · 羽毛球 AI 教练</title>
+<meta name="description" content="先看这篇：完整流水线图，以及**做得到 / 做不到**的现实校验。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html" class="current"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">路线 B · YOLO 与骨架分析</span></div>
+<h1 id="01-总览你要学的东西长什么样">01 · 总览：你要学的东西长什么样</h1>
+<blockquote>
+<p>先看全局，再动手。这一篇不写代码，只回答三个问题：
+<strong>要做成什么？做得到什么？按什么顺序学？</strong></p>
+</blockquote>
+<hr>
+<h2 id="一先说结论技术栈就这四个">一、先说结论：技术栈就这四个</h2>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>用什么</th>
+<th>为什么是它</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>视频读写</td>
+<td><strong>OpenCV</strong> (<code>opencv-python</code>)</td>
+<td>事实标准，教程最多</td>
+</tr>
+<tr>
+<td>人体骨架</td>
+<td><strong>Ultralytics YOLO-pose</strong>（<code>yolo26n-pose.pt</code> 起步）</td>
+<td>一条 <code>pip install</code>，一个模型同时给你<strong>多人检测框 + 17 个关键点 + 跟踪 id</strong></td>
+</tr>
+<tr>
+<td>球的轨迹</td>
+<td><strong>TrackNetV3</strong>（后期再上）</td>
+<td>羽毛球在 640 分辨率下只有几个像素，<strong>检测框方法不可行</strong>，要用热图回归</td>
+</tr>
+<tr>
+<td>数据分析</td>
+<td><strong>numpy + pandas</strong>，分类用 sklearn</td>
+<td>先用可解释的特征和简单模型，不要一上来上深度学习</td>
+</tr>
+</tbody>
+</table>
+<p><strong>明确不要现在碰的</strong>：MMPose/mmcv 全家桶、OpenPose（要编译 C++）、3D 姿态提升模型（MotionBERT）、
+自训练姿态模型（你没有标注数据）。理由见 <a href="p2-03.html"><code>part2-YOLO与骨架/03-姿态估计与骨架提取.md</code></a>。</p>
+<hr>
+<h2 id="二最终的流水线长这样">二、最终的流水线长这样</h2>
+<div class="codehilite"><pre><span></span><code>   📱 手机拍的羽毛球视频（固定机位，单打，正面或侧面）
+        │
+        │  ①  读视频
+        ▼
+   ┌─────────────────────────────────────────────────────┐
+   │  OpenCV：逐帧读取，拿到 帧号 / 时间戳 / 画面          │
+   └─────────────────────────────────────────────────────┘
+        │
+        │  ②  提取骨架        ← YOLO-pose 在这里
+        ▼
+   ┌─────────────────────────────────────────────────────┐
+   │  每帧每人一套 COCO-17 关键点 (x, y, 置信度) + 跟踪 id │
+   │  ★ 每个球员在整个视频里要有稳定的 id，不能这一帧是1号  │
+   │    下一帧变成2号                                      │
+   └─────────────────────────────────────────────────────┘
+        │
+        │  ③  清洗与平滑
+        ▼
+   ┌─────────────────────────────────────────────────────┐
+   │  低置信度的点丢掉（不要插值硬补）                     │
+   │  抖动 → 用 Savitzky-Golay 滤波平滑（不要直接算速度）  │
+   └─────────────────────────────────────────────────────┘
+        │
+        ├───────────────────────┐
+        │  ④a 找"击球时刻"       │  ④b 场地标定（可选但强烈建议）
+        ▼                       ▼
+   ┌──────────────────┐   ┌──────────────────────────────┐
+   │ 手腕速度的峰值    │   │ 球场线四点 → 单应矩阵         │
+   │ = 击球候选帧      │   │ 像素坐标 → 真实米制坐标        │
+   └──────────────────┘   └──────────────────────────────┘
+        │                       │
+        │  ⑤  算指标             │
+        ▼                       ▼
+   ┌─────────────────────────────────────────────────────┐
+   │  肘/肩/膝的「2D 投影角」、髋中心位移、挥拍时序、      │
+   │  击球间隔、连续多拍数…                                │
+   └─────────────────────────────────────────────────────┘
+        │
+        │  ⑥  出报告
+        ▼
+   🎬 带骨架叠加的视频  +  📊 指标时序曲线  +  📄 HTML 报告
+</code></pre></div>
+
+<p><strong>这张图就是你未来所有工作的地图。</strong> 卡住的时候回来看一眼：你现在在第几步。</p>
+<hr>
+<h2 id="三现实校验什么做得到什么做不到">三、现实校验：什么做得到，什么做不到</h2>
+<p><strong>这一节是本教程最重要的一节。</strong> 90% 的新手项目翻车，是因为一开始就承诺了做不到的事。</p>
+<h3 id="单目手机视频-固定机位可以做到">✅ 单目手机视频 + 固定机位，<strong>可以</strong>做到</h3>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>说明</th>
+<th>可信度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>击球时刻（第几帧）</td>
+<td>手腕速度峰值检测</td>
+<td>较高</td>
+</tr>
+<tr>
+<td>击球点画面坐标</td>
+<td>手腕关键点位置</td>
+<td>中（受遮挡影响）</td>
+</tr>
+<tr>
+<td>肘、肩、膝的<strong>画面投影角</strong></td>
+<td>三点连线算夹角</td>
+<td>中（<strong>不是生物力学真值</strong>）</td>
+</tr>
+<tr>
+<td>髋中心位移轨迹</td>
+<td>左右髋中点，逐帧</td>
+<td>中</td>
+</tr>
+<tr>
+<td>挥拍节奏 / 击球间隔</td>
+<td>相邻两次击球的帧差</td>
+<td>高</td>
+</tr>
+<tr>
+<td>连续多拍数</td>
+<td>击球次数统计</td>
+<td>高</td>
+</tr>
+<tr>
+<td>准备姿势（重心高低）</td>
+<td>髋中心的相对高度</td>
+<td>中</td>
+</tr>
+<tr>
+<td>击球类型粗分类</td>
+<td>杀/高远/吊/挑 — 需要先自己标注、或做规则</td>
+<td><strong>低</strong>，难</td>
+</tr>
+</tbody>
+</table>
+<h3 id="勉强能碰但必须标注不确定">⚠️ 勉强能碰，但必须标注"不确定"</h3>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>挥拍<strong>角速度</strong></td>
+<td>需要先平滑，且依赖帧率。拍摄帧率低（如 30fps）时峰值会被削平</td>
+</tr>
+<tr>
+<td>击球点<strong>高度</strong>（米）</td>
+<td>必须先做场地标定，否则只是像素值</td>
+</tr>
+<tr>
+<td>步伐类型</td>
+<td>没有公开的带步法标签的数据集，只能靠规则阈值，误判率高</td>
+</tr>
+<tr>
+<td>实时分析</td>
+<td>8GB 显存可以做到，但"实时"意味着放弃精度和后处理</td>
+</tr>
+</tbody>
+</table>
+<h3 id="单目-2D-做不到别写进目标">❌ 单目 2D <strong>做不到</strong>，别写进目标</h3>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>为什么做不到</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>躯干<strong>旋转</strong>角度</td>
+<td>绕身体纵轴的旋转在单个 2D 投影里<strong>信息上就不存在</strong></td>
+</tr>
+<tr>
+<td>肩关节<strong>内旋</strong></td>
+<td>同上，需要 3D</td>
+</tr>
+<tr>
+<td>关节角<strong>生物力学真值</strong></td>
+<td>单目有系统性低估（对照研究测得髋约 −11.2°、膝约 −10.6°），只能算投影角</td>
+</tr>
+<tr>
+<td>关节<strong>力矩</strong>、地面<strong>反作用力</strong></td>
+<td>完全没有数据来源，需要测力台</td>
+</tr>
+<tr>
+<td><strong>鞭打/动力链时序</strong>的绝对量</td>
+<td>需要精确的 3D 关节角速度</td>
+</tr>
+<tr>
+<td>球<strong>速</strong>（从球轨迹插值段的）</td>
+<td>球被遮挡时用算法"补"出来的轨迹，速度是插值出来的，不是测出来的</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>为什么强调这个？</strong> 因为调研那 6 份笔记里，<strong>有的作者把"算关节角度"当成核心卖点，
+有的作者却明确说单目算不出真值</strong>——两组说法直接冲突。
+详见 <a href="p1-05.html"><code>part1-多agent协作/05-实战复盘.md</code></a> 的案例 B。</p>
+<p><strong>你的项目定位应该是</strong>：<strong>画面投影指标的纵向对比</strong>（同一个球员、同一个机位、不同时间的对比），
+<strong>而不是</strong>生物力学测量。这个定位一变，你的报告立刻从"不严谨"变成"诚实的工具"。</p>
+</blockquote>
+<hr>
+<h2 id="四学习顺序四个阶段">四、学习顺序：四个阶段</h2>
+<p><strong>不要跳阶段。</strong> 每个阶段有一个明确的"跑通标志"。</p>
+<h3 id="阶段-0环境半天">阶段 0：环境（半天）</h3>
+<p>装好 Python 环境、跑通一个官方模型。</p>
+<ul>
+<li><strong>跑通标志</strong>：<code>yolo predict</code> 能在一张图上画出检测框</li>
+<li><strong>文档</strong>：<a href="p2-02.html"><code>02-YOLO从零到能用.md</code></a> 第一节</li>
+</ul>
+<h3 id="阶段-1看见骨架1-2-天">阶段 1：看见骨架（1-2 天）</h3>
+<p>不训练、不调参，先用官方权重把骨架画出来。</p>
+<ul>
+<li><strong>跑通标志</strong>：你自己的羽毛球视频，输出一段<strong>带火柴人叠加</strong>的新视频</li>
+<li><strong>文档</strong>：<a href="p2-03.html"><code>03-姿态估计与骨架提取.md</code></a></li>
+<li><strong>这一步的产出物</strong>：<code>01_pose.csv</code>（每帧每人的 17 个点 + 置信度 + 跟踪 id）</li>
+</ul>
+<blockquote>
+<p><strong>这一步是整个项目的地基。</strong> 如果骨架在视频里跟不住人（串号、丢失、抖成一团），
+后面所有指标都是垃圾。<strong>先在这里反复调试到满意，再往下走。</strong></p>
+</blockquote>
+<h3 id="阶段-2从骨架到指标2-4-天">阶段 2：从骨架到指标（2-4 天）</h3>
+<p>纯数据处理，不需要显卡，不需要训练。</p>
+<ul>
+<li><strong>跑通标志</strong>：从 CSV 算出（a）击球时刻列表（b）每个击球点的肘关节角（c）一张时序曲线图</li>
+<li><strong>文档</strong>：<a href="p2-04.html"><code>04-羽毛球运动表现分析实战.md</code></a></li>
+<li><strong>这一步的产出物</strong>：<code>02_events.csv</code> + <code>03_metrics.json</code> + <code>report.html</code></li>
+</ul>
+<blockquote>
+<p>这一阶段你会第一次遇到"<strong>算法结果是错的但我不知道怎么错的</strong>"。
+<a href="p2-05.html"><code>05-常见坑与调试.md</code></a> 就是为这个阶段准备的。</p>
+</blockquote>
+<h3 id="阶段-3场地标定与报告2-3-天">阶段 3：场地标定与报告（2-3 天）</h3>
+<p>把像素变成米，把数字变成看得懂的报告。</p>
+<ul>
+<li><strong>跑通标志</strong>：报告里出现"击球点离地约 X 米"这种带单位的数字</li>
+<li><strong>文档</strong>：<a href="p2-04.html"><code>04-羽毛球运动表现分析实战.md</code></a> 的标定一节</li>
+</ul>
+<h3 id="阶段-4选做训练自己的模型">阶段 4（选做）：训练自己的模型</h3>
+<p><strong>只有当你发现官方模型在你的场景下真的不够用时，才做这一步。</strong></p>
+<ul>
+<li>比如：球拍检测、特定球场的球网检测、特定球员的识别</li>
+<li><strong>文档</strong>：<a href="p2-02.html"><code>02-YOLO从零到能用.md</code></a> 的标注与训练一节</li>
+<li>⚠️ <strong>注意</strong>：自训练姿态模型<strong>不推荐</strong>——你的数据量远远不够</li>
+</ul>
+<h3 id="远期现在只知道就行">远期（现在只"知道"就行）</h3>
+<ul>
+<li><strong>球轨迹追踪</strong>（TrackNetV3）：这是"击球点高度、落点、回合节奏"这些指标真正的来源。
+  调研结论明确说：<strong>球轨迹是主线索而非辅助</strong>。等阶段 2 稳了再接</li>
+<li><strong>骨架动作识别</strong>（ST-GCN / PoseC3D）：需要大规模标注数据，个人项目不现实。
+  轻量替代方案见 <a href="p2-04.html"><code>04-羽毛球运动表现分析实战.md</code></a></li>
+</ul>
+<hr>
+<h2 id="五你需要准备什么">五、你需要准备什么</h2>
+<p><strong>硬件</strong>（你现在就有）：</p>
+<ul>
+<li>✅ RTX 4060 Laptop 8GB —— 跑 <code>yolo26n-pose</code> 推理绰绰有余，训练小模型也够</li>
+<li>✅ Python 3.12</li>
+<li>⚠️ <strong>需要装 ffmpeg</strong>（视频抽帧用）—— 安装方法见 <a href="p2-02.html"><code>02-YOLO从零到能用.md</code></a></li>
+</ul>
+<p><strong>数据</strong>（不用等，现在就能拍）：</p>
+<ul>
+<li>📱 <strong>一部手机 + 一个三脚架</strong>（或靠在椅子上）</li>
+<li>📐 <strong>机位要求</strong>：固定不动、正对或侧对球场、<strong>球员全身入画</strong>、背景尽量干净</li>
+<li>☀️ <strong>快门</strong>：如果能调，把快门调到 <strong>1/1000 秒以上</strong>——羽毛球动作太快，快门慢了全是糊的</li>
+<li>🎥 帧率 30fps 以上，60fps 更好</li>
+<li>👤 先拍<strong>单打</strong>（双打的跑位和遮挡复杂度是另一个量级）</li>
+</ul>
+<p><strong>先拍 3-5 段，每段 30 秒到 2 分钟就够。</strong> 不要一开始就拍几个小时的素材。</p>
+<hr>
+<h2 id="六时间预期说实话">六、时间预期（说实话）</h2>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>乐观</th>
+<th>现实</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段 0 环境</td>
+<td>半天</td>
+<td><strong>1-2 天</strong>（环境问题永远是最大的坑）</td>
+</tr>
+<tr>
+<td>阶段 1 看见骨架</td>
+<td>1 天</td>
+<td><strong>2-3 天</strong></td>
+</tr>
+<tr>
+<td>阶段 2 出指标</td>
+<td>2 天</td>
+<td><strong>3-5 天</strong></td>
+</tr>
+<tr>
+<td>阶段 3 标定+报告</td>
+<td>2 天</td>
+<td><strong>3-5 天</strong></td>
+</tr>
+<tr>
+<td><strong>到"能给朋友看"的程度</strong></td>
+<td>1 周</td>
+<td><strong>2-3 周</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>主要时间不会花在"学算法"上，而是花在</strong>：
+环境报错、路径写错、依赖版本冲突、自己的视频效果不好、指标算出来不知道对不对。</p>
+<blockquote>
+<p><strong>这恰恰是你有优势的地方</strong>：你有一个能读文件、能跑命令、能自己排查的 AI 助手。
+关键是<strong>你要学会怎么指挥它</strong>——每篇文档最后的「给 AI 编程助手的提示词」就是干这个的。</p>
+</blockquote>
+<hr>
+<h2 id="七下一步">七、下一步</h2>
+<p>按顺序读：</p>
+<ol>
+<li><a href="p2-02.html"><code>02-YOLO从零到能用.md</code></a> —— 先把环境搞定，跑通第一个模型</li>
+<li><a href="p2-03.html"><code>03-姿态估计与骨架提取.md</code></a> —— 让它在你自己的视频上画出骨架</li>
+<li><a href="p2-04.html"><code>04-羽毛球运动表现分析实战.md</code></a> —— 从骨架算出指标</li>
+<li><a href="p2-05.html"><code>05-常见坑与调试.md</code></a> —— 卡住的时候翻这本</li>
+</ol>
+<p>配套的可运行代码在 <code>../starter/</code>，先看那里的 <a href="index.html"><code>README.md</code></a>。</p>
+<div class="pager">
+<a class="prev" href="p1-05.html"><span class="lbl">上一篇</span><span class="ttl">实战复盘：43 条错误</span></a>
+<a class="next" href="p2-02.html"><span class="lbl">下一篇</span><span class="ttl">YOLO 从零到能用</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

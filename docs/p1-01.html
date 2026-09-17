@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>为什么需要多 agent · 羽毛球 AI 教练</title>
+<meta name="description" content="单 agent 的三面墙、五种协作模式，以及什么时候**不该**用多 agent。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html" class="current"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">路线 A · 多 agent 协作</span></div>
+<h1 id="01-为什么需要多-agent什么时候不需要">01 · 为什么需要多 agent，什么时候不需要</h1>
+<blockquote>
+<p>这一篇不讲工具，只讲判断。工具随时可以学，判断错了再好的工具也是浪费钱。</p>
+</blockquote>
+<h2 id="一先破除一个误解">一、先破除一个误解</h2>
+<p>多 agent <strong>不是</strong>"让 AI 变得更聪明"。</p>
+<p>同一个模型，你把它拆成 5 个 agent，它们的智商没有任何变化。多 agent 买到的是三样东西：</p>
+<table>
+<thead>
+<tr>
+<th>买到的东西</th>
+<th>是什么意思</th>
+<th>什么时候值钱</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>上下文隔离</strong></td>
+<td>子 agent 读的 5 万字资料，不会塞进主 agent 的对话里</td>
+<td>资料量大、且大部分是噪音时</td>
+</tr>
+<tr>
+<td><strong>并行</strong></td>
+<td>6 件事同时做，而不是排队做</td>
+<td>任务之间互不依赖时</td>
+</tr>
+<tr>
+<td><strong>独立视角</strong></td>
+<td>一个 agent 挑另一个 agent 的错，它没有"我刚写的，我不能打自己脸"的包袱</td>
+<td>需要正确性，而不是"看起来对"时</td>
+</tr>
+</tbody>
+</table>
+<p>反过来，多 agent 要付的成本：</p>
+<ul>
+<li><strong>协调成本</strong>：你要写清楚每个 agent 干什么，比你自己干还费脑子</li>
+<li><strong>Token 成本</strong>：6 个 agent 就是 6 份起步开销，扇出调研一次轻松烧掉几十万 token</li>
+<li><strong>信息损耗</strong>：子 agent 只能靠一段文字把结论交回来，中间过程的细节全丢了</li>
+<li><strong>假象风险</strong>：6 个 agent 都答错同一个问题时，你会因为"多数一致"而更相信那个错误（比单 agent 更危险）</li>
+</ul>
+<p><strong>结论：多 agent 是"并行 + 隔离 + 交叉验证"的工程手段，不是能力升级。</strong></p>
+<hr>
+<h2 id="二单-agent-的三个天花板">二、单 agent 的三个天花板</h2>
+<p>你会自然而然地想用多 agent，通常是因为撞到了下面某一面墙：</p>
+<p><strong>1. 上下文墙</strong>
+你让它读 30 篇论文然后写综述。读到第 20 篇时，前面 10 篇已经被压缩/遗忘了，写出来的东西开始"凭印象"。</p>
+<p><strong>2. 注意力墙</strong>
+一个 agent 同时扮演"产品经理 + 架构师 + 程序员 + 测试 + 技术写作"，它会在不同角色间反复横跳，通盘质量下降。这不是玄学——角色和目标写在同一个 prompt 里，指令会互相干扰。</p>
+<p><strong>3. 串行墙</strong>
+"帮我调研 6 个方向"，一个 agent 串行做完要 6 倍时间。而这 6 件事之间没有任何依赖。</p>
+<hr>
+<h2 id="三五种协作模式本教程的主要骨架">三、五种协作模式（本教程的主要骨架）</h2>
+<p>这五种模式覆盖了 95% 的实际需求。<strong>记住这五张图，比记住工具名有用得多。</strong></p>
+<h3 id="模式-1扇出调研Fan-out-Map">模式 1：扇出调研（Fan-out / Map）</h3>
+<div class="codehilite"><pre><span></span><code>         ┌──→ 调研员 A ──→ 笔记 A ──┐
+         ├──→ 调研员 B ──→ 笔记 B ──┤
+主 agent ─┼──→ 调研员 C ──→ 笔记 C ──┼─→ 汇总
+         ├──→ 调研员 D ──→ 笔记 D ──┤
+         └──→ 调研员 E ──→ 笔记 E ──┘
+</code></pre></div>
+
+<ul>
+<li><strong>特征</strong>：子任务同质、互不依赖、可以乱序完成</li>
+<li><strong>买到</strong>：并行速度 + 上下文隔离</li>
+<li><strong>风险</strong>：五个人可能重复劳动、口径不一致</li>
+<li><strong>必须做</strong>：给每个人一个<strong>互斥的边界</strong>（"你只负责 X，不要碰 Y"），并且要求<strong>统一格式</strong></li>
+<li><strong>DSH 工具</strong>：<code>workflow</code> 的 <code>parallel([...])</code>，或者直接开几个 <code>subagent</code></li>
+</ul>
+<h3 id="模式-2流水线Pipeline">模式 2：流水线（Pipeline）</h3>
+<div class="codehilite"><pre><span></span><code>素材1 ──→ 提取要点 ──→ 交叉验证 ──→ 成稿
+素材2 ──→ 提取要点 ──→ 交叉验证 ──→ 成稿
+素材3 ──→ 提取要点 ──→ 交叉验证 ──→ 成稿
+        （每一条独立跑完全程，不等别人）
+</code></pre></div>
+
+<ul>
+<li><strong>特征</strong>：每个素材都要走<strong>同一串</strong>处理步骤，但素材之间互不相干</li>
+<li><strong>和模式 1 的区别</strong>：模式 1 是"一个阶段"，模式 2 是"多个阶段"</li>
+<li><strong>关键优势</strong>：中间<strong>没有栅栏</strong>——素材 1 已经到第三步时，素材 3 可能还在第一步。整体吞吐远高于"所有素材都跑完第一步才开始第二步"</li>
+<li><strong>DSH 工具</strong>：<code>workflow</code> 的 <code>pipeline(items, stage1, stage2, ...)</code></li>
+</ul>
+<h3 id="模式-3生产者验证者Adversarial">模式 3：生产者—验证者（Adversarial）</h3>
+<div class="codehilite"><pre><span></span><code>写手 ──→ 初稿 ──→ 审校（专门挑错）──→ 问题清单 ──→ 修订
+</code></pre></div>
+
+<ul>
+<li><strong>特征</strong>：一个 agent 产出，<strong>另一个 agent 的唯一目标就是推翻它</strong></li>
+<li><strong>为什么有效</strong>：AI 有一个很顽固的毛病——<strong>它会给自己刚写的东西背书</strong>。让它"再检查一遍"，它倾向于说"检查过了，没问题"。换一个没有这段上下文的 agent，它才能真的挑出毛病</li>
+<li><strong>必须做</strong>：审校 agent 要拿到<strong>明确的挑错许可</strong>（"你现在的任务是找出错误，找到越多越好"），还要给它<strong>核实手段</strong>（联网搜索、读原始文件）</li>
+<li><strong>DSH 工具</strong>：开一个 <code>subagent</code> 专门做验证；或 <code>workflow</code> 里 phase 2</li>
+</ul>
+<blockquote>
+<p>本教程的这一套文档就是这么产出的。见 <a href="p1-05.html"><code>05-实战复盘.md</code></a>——6 份调研笔记的审校环节挑出了 <strong>43 条具体问题</strong>，包括 3 处直接跑不通的命令和 1 个跨文件自相矛盾的严重错误。</p>
+</blockquote>
+<h3 id="模式-4主管工人Orchestrator">模式 4：主管—工人（Orchestrator）</h3>
+<div class="codehilite"><pre><span></span><code>              ┌─→ 工人1 ─→ 汇报
+主 agent ─────┼─→ 工人2 ─→ 汇报 ─→ 主 agent 决定下一步
+（看汇报做决策）└─→ 工人3 ─→ 汇报
+</code></pre></div>
+
+<ul>
+<li><strong>特征</strong>：主 agent 不做事，只<strong>看汇报、下指令</strong>，多轮推进</li>
+<li><strong>和模式 1 的区别</strong>：模式 1 是"一次扇出，一次收口"；模式 4 是<strong>多轮循环</strong>，下一批任务取决于上一批的结果</li>
+<li><strong>DSH 工具</strong>：<code>subagent</code>（可后台、可持续对话）+ <code>send_message</code> 追加指令 + <code>list_agents</code> 查看状态</li>
+</ul>
+<h3 id="模式-5新鲜循环Ralph">模式 5：新鲜循环（Ralph）</h3>
+<div class="codehilite"><pre><span></span><code>目标 ──→ 工人（全新上下文）──→ 状态落盘 ──→ 下一轮工人（全新上下文）──→ ...
+                                      ↑
+                             工作区就是记忆
+</code></pre></div>
+
+<ul>
+<li><strong>特征</strong>：同一个目标，反复换<strong>全新的</strong> agent 来冲，每一轮都不携带上一轮的对话</li>
+<li><strong>为什么有用</strong>：长会话会累积"错误共识"和上下文垃圾。换个新人，它会用干净的眼光重新读代码/文档，常常一眼看出老 agent 绕了半天的坑</li>
+<li><strong>关键要求</strong>：<strong>记忆必须落在文件里</strong>（否则新 agent 一无所知），并且要有<strong>可验证的完成标准</strong></li>
+<li><strong>DSH 工具</strong>：<code>ralph</code></li>
+</ul>
+<hr>
+<h2 id="四什么时候不要用多-agent">四、什么时候<strong>不要</strong>用多 agent</h2>
+<p>这一节比上一节更重要。</p>
+<p><strong>❌ 不要拆的</strong>：</p>
+<ol>
+<li>
+<p><strong>紧密耦合的编码任务</strong>
+   "你写前端，你写后端，你写数据库"——三个人对接口的想象是不一样的，最后合不起来。<strong>代码库里同时改多个文件的活，交给一个 agent。</strong></p>
+</li>
+<li>
+<p><strong>需要连续判断的调试</strong>
+   排查一个 bug 需要"改一点 → 看结果 → 再改"。这是串行的、强依赖的，拆开只会让每个人重新理解一遍问题。</p>
+</li>
+<li>
+<p><strong>你自己没想清楚的任务</strong>
+   多 agent 会把你思路里的模糊放大 N 倍。<strong>先自己想清楚"要什么产物"，再拆。</strong></p>
+</li>
+<li>
+<p><strong>小任务</strong>
+   改个错别字、写个 20 行的脚本。多 agent 的协调开销大于收益。</p>
+</li>
+</ol>
+<p><strong>✅ 值得拆的</strong>：</p>
+<ul>
+<li>调研 / 资料收集 / 横向对比（无依赖、量大）</li>
+<li>同一份产出要<strong>多角度审查</strong>（安全、性能、可读性各一个）</li>
+<li>重复性批量操作（100 个文件逐个改，每个文件独立）</li>
+<li>需要<strong>独立视角</strong>的判断题（"这个方案到底行不行"）</li>
+</ul>
+<hr>
+<h2 id="五一条经验法则">五、一条经验法则</h2>
+<blockquote>
+<p><strong>能不能拆，看两件事：子任务之间有没有依赖？每个子任务能不能独立验收？</strong></p>
+</blockquote>
+<p>两个都是"是" → 放心拆。
+有一个是"否" → 要么别拆，要么你先花力气把边界和验收标准定义出来。</p>
+<p><strong>没有验收标准的多 agent，等于雇了 6 个人然后不检查他们的工作。</strong></p>
+<hr>
+<h2 id="六下一步">六、下一步</h2>
+<ul>
+<li>想知道这些模式在 DSH 里<strong>具体用什么工具实现</strong> → <a href="p1-02.html"><code>02-DSH多agent机制全解.md</code></a></li>
+<li>想动手搭一个属于你自己的 agent → <a href="p1-03.html"><code>03-手把手搭建preset.md</code></a></li>
+<li>想写编排脚本 → <a href="p1-04.html"><code>04-workflow脚本编写.md</code></a></li>
+<li>想看一个真实案例的全过程 → <a href="p1-05.html"><code>05-实战复盘.md</code></a></li>
+</ul>
+<div class="pager">
+<a class="prev disabled"></a>
+<a class="next" href="p1-02.html"><span class="lbl">下一篇</span><span class="ttl">DSH 多 agent 机制全解</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

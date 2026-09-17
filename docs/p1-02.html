@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSH 多 agent 机制全解 · 羽毛球 AI 教练</title>
+<meta name="description" content="宿主平面 vs 预设平面、subagent / fork / workflow / ralph 四种分身的取舍。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html" class="current"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">路线 A · 多 agent 协作</span></div>
+<h1 id="02-DSH-的多-agent-机制全解">02 · DSH 的多 agent 机制全解</h1>
+<blockquote>
+<p>这一篇讲的是<strong>你现在正在用的这套 harness</strong> 内部真实的机制，不是通用科普。
+里面提到的每一行配置，都能在你的机器上找到对应文件。</p>
+</blockquote>
+<hr>
+<h2 id="一先建立一张地图两个平面">一、先建立一张地图：两个平面</h2>
+<p>DSH 里的一切能力都是<strong>一行配置</strong>（Cordis 的 plugin row）。这些行分成两个平面：</p>
+<div class="codehilite"><pre><span></span><code>┌──────────────────────────── 进程级（一个进程一份） ────────────────────────────┐
+│  HOST 组成 (host composition)                                                 │
+│                                                                               │
+│   · 各种注册表：tools / systemPrompt / agents / agent-loop / sessions          │
+│   · 会话持久化、设置、凭据、遥测                                                │
+│   · 沙箱 &amp; 审批栈、模型路由                                                     │
+│   · ★ subagents 注册表 + 它的 spawn / fork 后端  ← 多 agent 的地基在这里        │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                     ▲ 装载
+┌──────────────────────────── 会话级（每个会话一份） ───────────────────────────┐
+│  AGENT PRESET（agent 预设）                                                    │
+│                                                                               │
+│   · persona（人格设定）                                                        │
+│   · 这个 agent 能用哪些工具                                                     │
+│   · 压缩策略（上下文满了怎么办）                                                │
+│   · ★ 委派工具（subagent / subagent_fork / workflow / ralph）← 只是"工具"      │
+└───────────────────────────────────────────────────────────────────────────────┘
+</code></pre></div>
+
+<p><strong>关键推论：多 agent 的"发动机"在 host 里，preset 只决定"这个 agent 有没有方向盘"。</strong></p>
+<p>为什么这么设计？因为 <code>subagents</code> 注册表是<strong>进程单例</strong>——浏览器的 agent 列表要跨会话查询它。如果它放进 preset，第二个会话挂载时就会撞名报错。</p>
+<blockquote>
+<p>这一条是新手写 preset 时最常犯的错，记住它：<strong>会"提供服务"的行，不能随便放进 preset。</strong></p>
+</blockquote>
+<hr>
+<h2 id="二你的工具箱四种分身">二、你的工具箱：四种"分身"</h2>
+<p>DSH 给你四把不同的刀。<strong>它们的区别不是"哪个强"，而是"哪种上下文关系"</strong>。</p>
+<h3 id="1-subagent-全新的员工">1. <code>subagent</code> —— 全新的员工</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>上下文</td>
+<td><strong>全新的</strong>，看不到你和它的对话历史。你给它的 prompt 必须<strong>自包含</strong></td>
+</tr>
+<tr>
+<td>模型</td>
+<td>可以指定别的模型（<code>modelSelectionSettings: true</code> 时）；适合"用便宜模型干粗活"</td>
+</tr>
+<tr>
+<td>后台</td>
+<td>默认后台，立刻返回一个 id，跑完通知你</td>
+</tr>
+<tr>
+<td>持续对话</td>
+<td><strong>可以</strong>。跑完后你可以再用 <code>send_message</code> 给它派新活</td>
+</tr>
+<tr>
+<td>拿回什么</td>
+<td>只有它的<strong>最终文本</strong>。中间步骤你看不见</td>
+</tr>
+</tbody>
+</table>
+<p><strong>什么时候用</strong>：一块自包含的活（"去把这个目录的文件都读一遍，总结成表"）。</p>
+<p><strong>最常犯的错</strong>：prompt 写得太短，默认它知道你在聊什么。它<strong>什么都不知道</strong>。</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code>❌ "帮我把上面那个改了"          → 它不知道"上面"是什么
+✅ "在 D:\program\x\a.py 里，把第 30 行的 timeout 从 60 改成 120。
+    改完把改动前后的行贴给我。"
+</code></pre></div>
+
+<h3 id="2-subagent_fork-带着记忆分家">2. <code>subagent_fork</code> —— 带着记忆分家</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>上下文</td>
+<td><strong>继承你到目前为止的全部对话</strong>（不含当前正在进行的这一轮）</td>
+</tr>
+<tr>
+<td>模型</td>
+<td><strong>强制和父 agent 相同</strong>。原因：继承的历史能命中 KV cache，换模型就白费了</td>
+</tr>
+<tr>
+<td>适合</td>
+<td>"接着我们刚才聊的这件事，你去深挖一下"</td>
+</tr>
+</tbody>
+</table>
+<p><strong>什么时候用</strong>：任务建立在你俩已有的上下文上（复盘、审查、续写）。</p>
+<p><strong>省钱的原理</strong>：fork 出来的子 agent 复用了父 agent 已经算过的 KV cache，比 <code>subagent</code> 重新喂一大段背景更便宜。所以<strong>能用 fork 就别用 spawn 加长 prompt</strong>。</p>
+<h3 id="3-workflow-你写调度脚本它开一堆-agent">3. <code>workflow</code> —— 你写调度脚本，它开一堆 agent</h3>
+<p>这是<strong>唯一让你"编程"控制多个 agent</strong> 的入口。你写的是一段 JavaScript，脚本本身<strong>不调用大模型</strong>，它只负责<strong>调度</strong>：</p>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="nx">phase</span><span class="p">(</span><span class="s1">'调研：六路并行'</span><span class="p">)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">notes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">parallel</span><span class="p">(</span>
+<span class="w">  </span><span class="nx">topics</span><span class="p">.</span><span class="nx">map</span><span class="p">((</span><span class="nx">t</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="nx">promptFor</span><span class="p">(</span><span class="nx">t</span><span class="p">),</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="nx">t</span><span class="p">.</span><span class="nx">title</span><span class="p">,</span><span class="w"> </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'调研：六路并行'</span><span class="w"> </span><span class="p">}))</span>
+<span class="p">)</span>
+<span class="nx">phase</span><span class="p">(</span><span class="s1">'交叉审校'</span><span class="p">)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">review</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="nx">reviewPrompt</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">'审校'</span><span class="w"> </span><span class="p">})</span>
+<span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">完成数</span><span class="o">:</span><span class="w"> </span><span class="nx">notes</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="nb">Boolean</span><span class="p">).</span><span class="nx">length</span><span class="p">,</span><span class="w"> </span><span class="nx">审校</span><span class="o">:</span><span class="w"> </span><span class="nx">review</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+
+<p><strong>这是本教程的主角</strong>，单独一篇讲：<a href="p1-04.html"><code>04-workflow脚本编写.md</code></a>。</p>
+<h3 id="4-ralph-不断换新人的循环">4. <code>ralph</code> —— 不断换新人的循环</h3>
+<p>同一个<strong>不可变的目标</strong>，一轮一轮开<strong>全新</strong>的 agent 去冲。每轮都是干净上下文，<strong>工作区里的文件就是它唯一的记忆</strong>。</p>
+<p><strong>什么时候用</strong>：目标是明确的、可验证的（"让这个测试通过"），但路径不确定，需要反复试。<strong>必须</strong>把进展写在文件里。</p>
+<p><strong>什么时候别用</strong>：目标模糊、或者需要连续对话才能推进的活。</p>
+<hr>
+<h2 id="三配套的管理工具">三、配套的"管理"工具</h2>
+<p>开分身容易，管分身难。这三个工具是配套的：</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>作用</th>
+<th>典型用法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>list_agents</code></td>
+<td>列出你的子 agent（id / 标签 / 状态）</td>
+<td>忘了自己开了几个、谁还在跑</td>
+</tr>
+<tr>
+<td><code>send_message</code></td>
+<td>给某个子 agent 发消息</td>
+<td>它在跑 → 转向它的下一步；它空闲 → 给它开新一轮</td>
+</tr>
+<tr>
+<td><code>interrupt_agent</code></td>
+<td>打断某个 agent 当前的这一轮</td>
+<td>发现方向错了，别等它跑完</td>
+</tr>
+</tbody>
+</table>
+<p>注意 <code>send_message</code> 的语义：<strong>它不是提问，是投递</strong>。调用成功只代表"消息送到了"，不代表对方会立刻回你。你需要等它完成时系统给你的通知。</p>
+<hr>
+<h2 id="四怎么选一张决策表">四、怎么选：一张决策表</h2>
+<table>
+<thead>
+<tr>
+<th>你的情况</th>
+<th>用哪个</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>一块独立的小活，和当前对话无关</td>
+<td><code>subagent</code>（后台）</td>
+</tr>
+<tr>
+<td>接着当前对话继续挖</td>
+<td><code>subagent_fork</code></td>
+</tr>
+<tr>
+<td>同一套流程要跑很多份素材</td>
+<td><code>workflow</code> + <code>pipeline</code></td>
+</tr>
+<tr>
+<td>一大批互不依赖的活要同时开</td>
+<td><code>workflow</code> + <code>parallel</code></td>
+</tr>
+<tr>
+<td>需要结构化结果（表格、字段）而不是一段话</td>
+<td><code>workflow</code> + <code>agent(..., { schema })</code></td>
+</tr>
+<tr>
+<td>要反复试错直到达标</td>
+<td><code>ralph</code></td>
+</tr>
+<tr>
+<td>就改个错别字</td>
+<td><strong>别用，自己改</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="五钱和上下文两个必须理解的机制">五、钱和上下文：两个必须理解的机制</h2>
+<h3 id="机制-1为什么子-agent-能省上下文">机制 1：为什么子 agent 能省上下文</h3>
+<p>子 agent 的过程（读了 20 个文件、试了 5 种方案）<strong>全部发生在它自己的上下文里</strong>。回到你这儿的只有一段最终文本。</p>
+<div class="codehilite"><pre><span></span><code>不隔离：你读了 20 个文件 × 5000 字 = 10 万字塞进你的对话
+隔离后：6 个 agent 各读 20 个文件，你只收到 6 × 300 字 = 1800 字
+</code></pre></div>
+
+<p><strong>代价</strong>：细节丢了。如果它得出了错误结论，你<strong>看不见它是怎么错的</strong>。所以——
+<strong>重要产物要让 agent 自己写进文件</strong>，而不是只让它"说给你听"。文件是它留给你的完整过程，返回文本只是索引。</p>
+<h3 id="机制-2为什么-fork-比-spawn-便宜">机制 2：为什么 fork 比 spawn 便宜</h3>
+<p>KV cache。父 agent 已经算过的对话前缀，fork 出来的子 agent 可以直接复用。换模型 / 改前缀都会让 cache 失效，所以 DSH 强制 fork 的子 agent 用同一个模型。</p>
+<p><strong>实践结论</strong>：
+- 任务能用已有上下文描述 → <code>subagent_fork</code>
+- 任务完全独立 → <code>subagent</code>，但 prompt 要写全
+- <strong>不要</strong>为了"省钱"把一大堆背景塞给 <code>subagent</code>——那正是 fork 该干的活</p>
+<hr>
+<h2 id="六在-GUI-里看见它们">六、在 GUI 里看见它们</h2>
+<p>多 agent 不是黑盒。你在这个 Web GUI 里能直接看到：</p>
+<ul>
+<li>每个子 agent 是一个<strong>独立的会话</strong>，有 id 和标签（就是你传的 <code>label</code>）</li>
+<li>状态：<code>running</code>（正在干活）/ <code>idle</code>（在等你派活）/ <code>ready</code>（只在存储里，可以唤醒）</li>
+<li>派活的<strong>消息投递失败会明确报错</strong>——不会静默丢掉</li>
+</ul>
+<blockquote>
+<p><strong>给你的第一个实操建议</strong>：打开一个 workflow 或开几个 subagent，然后<strong>盯着 GUI 看</strong>。看它们什么时候起、什么时候落、返回了什么。一两次之后你就对"多 agent 到底在发生什么"有实感了。</p>
+</blockquote>
+<hr>
+<h2 id="七下一步">七、下一步</h2>
+<ul>
+<li>想让<strong>你自己定义的 agent</strong> 拥有这些工具（甚至拥有别人没有的工具）→ <a href="p1-03.html"><code>03-手把手搭建preset.md</code></a></li>
+<li>想写编排脚本 → <a href="p1-04.html"><code>04-workflow脚本编写.md</code></a></li>
+</ul>
+<div class="pager">
+<a class="prev" href="p1-01.html"><span class="lbl">上一篇</span><span class="ttl">为什么需要多 agent</span></a>
+<a class="next" href="p1-03.html"><span class="lbl">下一篇</span><span class="ttl">手把手搭建 preset</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>调研 01 · YOLO 全景 · 羽毛球 AI 教练</title>
+<meta name="description" content="版本序列、任务类型、8GB 显存下的选型。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html" class="current">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">代码与资料</span></div>
+<h1 id="YOLO-技术全景与硬件选型羽毛球视频分析-RTX-4060-Laptop-8GB">YOLO 技术全景与硬件选型（羽毛球视频分析 · RTX 4060 Laptop 8GB）</h1>
+<blockquote>
+<p>核对时间：PyPI 上 <code>ultralytics</code> 最新版 <strong>8.4.153</strong>；官方最新模型 <strong>YOLO26</strong>（2026-01 发布）；<strong>YOLO27 尚未发布</strong>。以下版本号、模型名、命令均可点链接复核。</p>
+</blockquote>
+<h2 id="一句话结论">一句话结论</h2>
+<p>做羽毛球视频分析，<strong>从 <code>yolo11n-pose.pt</code> 起步</strong>——YOLO11 版本、姿态估计任务、n 尺寸。先用官方 COCO 17 点权重跑通"读视频 → 出关键点 → 算关节角度"这条链路，再考虑标注微调。不要从 detect 起步，不要用 YOLO12，不要一上来就上 m/l/x。</p>
+<h2 id="核心概念">核心概念</h2>
+<h3 id="版本序列哪些是官方的">版本序列：哪些是官方的</h3>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>归属</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>YOLOv5 / YOLOv8 / <strong>YOLO11</strong> / <strong>YOLO26</strong></td>
+<td>Ultralytics 自研（官方主线）</td>
+</tr>
+<tr>
+<td>YOLOv6 美团 · YOLOv7、YOLOv9 中研院 Wang · YOLOv10 清华 · YOLO12 Buffalo+国科大 · YOLO-NAS Deci AI</td>
+<td>第三方论文，被集成进同一个库</td>
+</tr>
+</tbody>
+</table>
+<p>YOLO11（2024-09-10）被官方标注为 "Current stable release and the recommended choice for all use cases"，即<strong>当前最稳的选择</strong>，资料最多、报错最好搜。YOLO26（2026-01）是最新 SOTA，主打端到端无 NMS。</p>
+<p><strong>YOLO12 官方明确警告</strong>是社区模型，"may exhibit training instability, elevated memory consumption"，且<strong>只发布了 detect 预训练权重</strong>，pose/seg/cls/obb 的 <code>.pt</code> 全都没有，必须从 <code>.yaml</code> 从零训练，官方原话是建议改用 YOLO11 或 YOLO26。对不会调试的人直接排除。</p>
+<h3 id="许可证AGPL-30-的红线">许可证：AGPL-3.0 的红线</h3>
+<p>库与官方权重均为 AGPL-3.0。<strong>免费</strong>：个人学习、学术研究、课程作业、完全开源项目。<strong>必须买 Enterprise 授权</strong>：任何商业产品/服务、闭源软件、公司内部工具、SaaS/API、嵌入硬件设备，<strong>以及"用自己微调出来的模型商用"</strong>。判据是"是否愿意把整个项目开源"；AGPL 覆盖网络服务，所以放服务器上不发给客户也躲不掉。自己学、给教练看——免费；<strong>卖课、卖 App、卖给球馆——要谈授权</strong>。</p>
+<h3 id="五种任务的区别">五种任务的区别</h3>
+<table>
+<thead>
+<tr>
+<th>任务</th>
+<th>后缀</th>
+<th>输出</th>
+<th>羽毛球相关度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>检测</td>
+<td>无</td>
+<td>矩形框 + 类别</td>
+<td>低：只有框，算不出动作</td>
+</tr>
+<tr>
+<td>实例分割</td>
+<td><code>-seg</code></td>
+<td>像素级掩膜</td>
+<td>低：标注成本极高</td>
+</tr>
+<tr>
+<td><strong>姿态</strong></td>
+<td><strong><code>-pose</code></strong></td>
+<td><strong>人体 17 关键点 (x, y, 可见性)</strong></td>
+<td><strong>最高：核心任务</strong></td>
+</tr>
+<tr>
+<td>分类</td>
+<td><code>-cls</code></td>
+<td>整图单一标签</td>
+<td>低：无法定位帧内的人</td>
+</tr>
+<tr>
+<td>旋转框</td>
+<td><code>-obb</code></td>
+<td>带角度的旋转框</td>
+<td>低：人形不需旋转框</td>
+</tr>
+</tbody>
+</table>
+<p>17 点索引固定：0 鼻、1-2 眼、3-4 耳、5-6 肩、7-8 肘、9-10 腕、11-12 髋、13-14 膝、15-16 踝——<strong>肘、肩、腕、髋、膝正好覆盖挥拍角度、蹬转、重心转移</strong>。</p>
+<h3 id="各尺寸参数量官方-COCO-数据">各尺寸参数量（官方 COCO 数据）</h3>
+<p>YOLO11 检测：n 2.6M / 6.5GFLOPs / mAP 39.5；s 9.4M / 21.6 / 47.0；m 20.1M / 68.1 / 51.5；l 25.3M / 87.2 / 53.4；x 56.9M / 195.3 / 54.7。
+YOLO11-pose：n 2.9M / 7.5GFLOPs / mAP 50.0，m 20.9M / 64.9；YOLO26n-pose 2.9M / 57.2。</p>
+<p><strong>官方只公布 CPU ONNX 与 T4 TensorRT 耗时，没有笔记本显卡数据</strong>——任何"4060 跑 XX FPS"的表格都不如自己实测。</p>
+<h3 id="8GB-显存上的可行规模">8GB 显存上的可行规模</h3>
+<p>4060 Laptop 是 Ada 架构、3072 CUDA 核心、8GB GDDR6。<strong>8GB 是天花板，不是算力</strong>：推理 n/s 宽裕、m 可行；训练 n/s 舒服，m 在 <code>imgsz=640</code> 下需把 batch 压到 4–8 且可能仍紧，<strong>l/x 不现实</strong>（训练还要存梯度与优化器状态）。内置 <code>batch=-1</code> 会按约 60% 显存自动找 batch，单卡首次 OOM 还会自动减半重试最多 3 次——<strong>先别手调，先让它探</strong>。</p>
+<h2 id="可执行的最短路径">可执行的最短路径</h2>
+<div class="codehilite"><pre data-lang="bash"><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>ultralytics<span class="w">                      </span><span class="c1"># Python&gt;=3.8，自带 PyTorch</span>
+pip<span class="w"> </span>install<span class="w"> </span>ultralytics<span class="o">[</span>export<span class="o">]</span><span class="w">              </span><span class="c1"># 需要导出 ONNX/TensorRT 时</span>
+python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"</span>
+yolo<span class="w"> </span>pose<span class="w"> </span>predict<span class="w"> </span><span class="nv">model</span><span class="o">=</span>yolo11n-pose.pt<span class="w"> </span><span class="nv">source</span><span class="o">=</span>my_match.mp4<span class="w"> </span><span class="nv">save</span><span class="o">=</span>True
+yolo<span class="w"> </span>benchmark<span class="w"> </span><span class="nv">model</span><span class="o">=</span>yolo11n-pose.pt<span class="w"> </span><span class="nv">data</span><span class="o">=</span>coco8-pose.yaml<span class="w"> </span><span class="nv">imgsz</span><span class="o">=</span><span class="m">640</span><span class="w"> </span><span class="nv">device</span><span class="o">=</span><span class="m">0</span>
+yolo<span class="w"> </span>pose<span class="w"> </span>train<span class="w"> </span><span class="nv">data</span><span class="o">=</span>my_badminton.yaml<span class="w"> </span><span class="nv">model</span><span class="o">=</span>yolo11n-pose.pt<span class="w"> </span><span class="nv">epochs</span><span class="o">=</span><span class="m">100</span><span class="w"> </span><span class="nv">imgsz</span><span class="o">=</span><span class="m">640</span><span class="w"> </span><span class="nv">batch</span><span class="o">=</span>-1<span class="w"> </span><span class="nv">device</span><span class="o">=</span><span class="m">0</span>
+yolo<span class="w"> </span>track<span class="w"> </span><span class="nv">model</span><span class="o">=</span>yolo11n-pose.pt<span class="w"> </span><span class="nv">source</span><span class="o">=</span>my_match.mp4<span class="w"> </span><span class="nv">tracker</span><span class="o">=</span>ocsort.yaml<span class="w"> </span><span class="nv">save</span><span class="o">=</span>True
+</code></pre></div>
+
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ultralytics</span><span class="w"> </span><span class="kn">import</span> <span class="n">YOLO</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">YOLO</span><span class="p">(</span><span class="s2">"yolo11n-pose.pt"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">track</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"my_match.mp4"</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">persist</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">tracker</span><span class="o">=</span><span class="s2">"ocsort.yaml"</span><span class="p">):</span>
+    <span class="n">xy</span><span class="p">,</span> <span class="n">ids</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">keypoints</span><span class="o">.</span><span class="n">xy</span><span class="p">,</span> <span class="n">r</span><span class="o">.</span><span class="n">boxes</span><span class="o">.</span><span class="n">id</span>   <span class="c1"># 17 个关键点 + 跟踪 ID</span>
+</code></pre></div>
+
+<p><code>stream=True</code> 逐帧产出，长视频不爆内存；<code>persist=True</code> 保持跨帧 ID。官方跟踪器选型指引写明：非线性运动（体育、舞蹈、急停变向）且不想要重识别开销 → <strong>OC-SORT</strong>。另有 <code>botsort.yaml</code> / <code>bytetrack.yaml</code> / <code>deepocsort.yaml</code> / <code>fasttrack.yaml</code> / <code>tracktrack.yaml</code> 可选。</p>
+<h2 id="选型建议针对-8GB-显存">选型建议（针对 8GB 显存）</h2>
+<p><strong>明确回答：姿态估计任务 + n 尺寸，即 <code>yolo11n-pose.pt</code>。</strong></p>
+<ol>
+<li><strong>任务选 pose</strong>：只有关键点能算出角度、轨迹、重心；detect 只给框，classify 只给标签，obb 解决的是航拍/文字的旋转问题，seg 标注成本对个人项目不划算。</li>
+<li><strong>尺寸选 n</strong>：2.9M 参数、7.5 GFLOPs，8GB 训练推理都宽裕；瓶颈是<strong>数据准备和调试</strong>，不是精度。跑通后升 <code>s</code> 通常还有提升，<code>m</code> 在 8GB 训练会勉强。</li>
+<li><strong>版本选 YOLO11</strong>：官方认证稳定版，生态资料最多；YOLO26 更强但资料少；YOLO12 无 pose 权重，排除。</li>
+<li><strong>别急着自己训练</strong>：先用官方 COCO 权重直接预测。真正要解决的多是"远处球员漏检"，手段是<strong>提高推理 <code>imgsz</code></strong> 或<strong>先裁剪球场区域再送入</strong>，而不是换更大模型。</li>
+</ol>
+<h2 id="常见坑">常见坑</h2>
+<ul>
+<li><strong>Windows 训练脚本必须加 <code>if __name__ == "__main__":</code></strong>，否则报 RuntimeError（官方明示）。</li>
+<li><strong>Windows 多卡训练是坏的</strong>：<code>torch&gt;=2.4</code> 官方 Windows 轮子未编 libuv，报 <code>use_libuv was requested but PyTorch was built without libuv support</code>。单卡 <code>device=0</code> 正常，多卡请用 WSL2。</li>
+<li><strong>网上"YOLOv11""YOLO13"都是错的</strong>：官方没有 v11，正确写法是 YOLO11；<strong>YOLO13 不存在</strong>，提它的资料是编的。</li>
+<li><code>batch</code> 默认 16，m/l 在 8GB 上直接 OOM，用 <code>batch=-1</code> 或先降到 4。</li>
+<li>球员交叉时<strong>跟踪 ID 会漂</strong>，快速球类场景尤其明显；用 <code>ocsort.yaml</code>，且 <code>persist=True</code> 只适用于同一段连续视频。</li>
+<li>视频推理慢，先怀疑视频解码与数据加载，而不是模型。</li>
+</ul>
+<h2 id="参考链接">参考链接</h2>
+<ul>
+<li><a href="https://docs.ultralytics.com/models/yolo11/">Ultralytics YOLO11 官方文档（各尺寸参数表）</a></li>
+<li><a href="https://docs.ultralytics.com/models/yolo26/">Ultralytics YOLO26 官方文档</a></li>
+<li><a href="https://docs.ultralytics.com/models/yolo12/">Ultralytics YOLO12 官方文档（社区模型警告）</a></li>
+<li><a href="https://docs.ultralytics.com/tasks/pose/">Ultralytics 姿态估计任务文档（17 点索引）</a></li>
+<li><a href="https://docs.ultralytics.com/modes/train/">Ultralytics 训练模式文档（batch 自动 / OOM 重试 / Windows 注意）</a></li>
+<li><a href="https://docs.ultralytics.com/modes/track/">Ultralytics 跟踪模式文档（六种跟踪器选型）</a></li>
+<li><a href="https://docs.ultralytics.com/modes/benchmark/">Ultralytics 基准测试模式文档</a></li>
+<li><a href="https://www.ultralytics.com/license">Ultralytics 许可证与商用边界</a></li>
+<li><a href="https://pypi.org/project/ultralytics/">PyPI: ultralytics（版本号与 AGPL-3.0 声明）</a></li>
+<li><a href="https://www.notebookcheck.net/NVIDIA-GeForce-RTX-4060-Laptop-GPU-Benchmarks-and-Specs.675692.0.html">NVIDIA GeForce RTX 4060 Laptop GPU 规格</a></li>
+</ul>
+<h2 id="给-AI-编程助手的提示词">给 AI 编程助手的提示词</h2>
+<ol>
+<li><strong>把任务说死</strong>："用 <code>ultralytics</code> 做羽毛球视频姿态分析，模型固定 <code>yolo11n-pose.pt</code>（YOLO11 + pose + n 尺寸），不要擅自换成 YOLOv8 / YOLO12 / 其他尺寸。"</li>
+<li><strong>要求先验证再写</strong>："写代码前确认模型文件名与参数名在官方文档里真实存在并给出链接，不要凭记忆编造参数。"</li>
+<li><strong>交代环境</strong>："Windows + RTX 4060 Laptop 8GB + Python 3.10，<code>ultralytics 8.4.x</code>。训练必须带 <code>if __name__ == '__main__':</code>；batch 用 <code>batch=-1</code> 让我自己看显存，不要假设我有 24GB 显存。"</li>
+<li><strong>要它检查三件事</strong>：① 先跑 <code>torch.cuda.is_available()</code>；② 视频处理必须 <code>stream=True</code>，不要一次把所有帧读进内存；③ 跟踪用 <code>persist=True</code> + <code>tracker="ocsort.yaml"</code>，并提醒我球员交叉时 ID 会漂。</li>
+<li><strong>提醒许可证</strong>："先说明这段代码若用于商用（卖课 / 卖 App）会触发 AGPL-3.0 的哪些义务。"</li>
+</ol>
+<div class="pager">
+<a class="prev" href="research-00.html"><span class="lbl">上一篇</span><span class="ttl">审校报告（43 条纠错）</span></a>
+<a class="next" href="research-02.html"><span class="lbl">下一篇</span><span class="ttl">调研 02 · 数据集与训练</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

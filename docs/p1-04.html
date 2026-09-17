@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>workflow 脚本编写 · 羽毛球 AI 教练</title>
+<meta name="description" content="用一段 JS 编排一支 agent 队伍：并行、流水线、结构化返回、失败项报告。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html" class="current"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">路线 A · 多 agent 协作</span></div>
+<h1 id="04-workflow-脚本编写让多个-agent-按你的剧本干活">04 · workflow 脚本编写：让多个 agent 按你的剧本干活</h1>
+<blockquote>
+<p><code>workflow</code> 是 DSH 里唯一让你<strong>用代码控制多个 agent</strong> 的工具。
+学会它，你就从"跟一个 agent 聊天"升级成"指挥一支队伍"。</p>
+</blockquote>
+<hr>
+<h2 id="一先理解它是什么">一、先理解它是什么</h2>
+<p>你交给 <code>workflow</code> 的，是<strong>一段 JavaScript</strong>。</p>
+<p>关键认知：<strong>这段脚本自己不调用大模型。</strong> 它只做三件事：</p>
+<ol>
+<li><strong>派活</strong> —— <code>agent(prompt)</code> 开一个子 agent</li>
+<li><strong>等结果</strong> —— <code>await</code> 拿到那个 agent 的最终输出</li>
+<li><strong>编排</strong> —— 用普通 JS 的循环/条件/变量，决定下一步派什么活</li>
+</ol>
+<div class="codehilite"><pre data-lang="text"><span></span><code>       你的脚本（纯逻辑，不烧 token）
+            │
+            ├── agent(A) ──→ 子 agent A ──→ 返回文本
+            ├── agent(B) ──→ 子 agent B ──→ 返回文本
+            └── agent(C) ──→ 子 agent C ──→ 返回对象
+            │
+       ┌────┴────┐
+       │  return │  → 结果交回主 agent
+       └─────────┘
+</code></pre></div>
+
+<p><strong>所以：写 workflow = 写调度逻辑。</strong> 智能的部分在子 agent 里。</p>
+<hr>
+<h2 id="二脚本能用的东西就这五个-args">二、脚本能用的东西（就这五个 + args）</h2>
+<p>脚本运行在一个<strong>受限沙箱</strong>里，<strong>没有</strong>文件系统、网络、定时器、Node API。
+这不是限制，是设计：脚本只负责协调，干活的活交给 agent。</p>
+<table>
+<thead>
+<tr>
+<th>名字</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agent(prompt, opts?)</code></td>
+<td>开一个子 agent，等它跑完。<strong>返回它的最终文本</strong>；给了 <code>schema</code> 就返回<strong>校验过的对象</strong></td>
+</tr>
+<tr>
+<td><code>pipeline(items, ...stages)</code></td>
+<td>每个 item 独立跑完所有 stage。<strong>stage 之间没有栅栏</strong></td>
+</tr>
+<tr>
+<td><code>parallel(thunks)</code></td>
+<td>并发跑一组函数，<strong>全部跑完才返回</strong>（有栅栏）</td>
+</tr>
+<tr>
+<td><code>phase(title)</code></td>
+<td>标记一个阶段，用于进度显示。<strong>title 必须和 meta 里声明的一致</strong></td>
+</tr>
+<tr>
+<td><code>log(message)</code></td>
+<td>输出一行进度文字</td>
+</tr>
+<tr>
+<td><code>args</code></td>
+<td>工具调用时传进来的 <code>args</code> 参数（一个对象）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="三条会直接杀死脚本的错误">⚠️ 三条会直接杀死脚本的错误</h3>
+<p><strong>用错了这些 hook，整个脚本立刻死</strong>（不会降级成某个 item 失败）：</p>
+<ul>
+<li><code>agent()</code> 传了不认识的选项（比如 <code>effort</code> / <code>isolation</code> / <code>agentType</code>）</li>
+<li><code>schema</code> 用了不允许的关键字</li>
+<li>超出了并发数 / 总 agent 数上限</li>
+</ul>
+<blockquote>
+<p>注意这个区别：<strong>stage 里抛异常</strong> → 只有那<strong>一个 item</strong> 变成 <code>null</code>，其他 item 继续；
+<strong>hook 本身用错</strong> → <strong>全脚本挂掉</strong>。所以参数要写对。</p>
+</blockquote>
+<hr>
+<h2 id="三agent-的选项只有这么几个">三、<code>agent()</code> 的选项，只有这么几个</h2>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="s1">'你的提示词'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">'显示用短标签'</span><span class="p">,</span><span class="w">        </span><span class="c1">// 在 GUI 里显示，方便你看谁在跑</span>
+<span class="w">  </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'阶段标题'</span><span class="p">,</span><span class="w">            </span><span class="c1">// 必须和 meta.phases 里的 title 完全一致</span>
+<span class="w">  </span><span class="nx">schema</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* JSON Schema */</span><span class="w"> </span><span class="p">},</span><span class="c1">// 给了就返回对象，不给就返回文本</span>
+<span class="w">  </span><span class="nx">provider</span><span class="o">:</span><span class="w"> </span><span class="s1">'xxx'</span><span class="p">,</span><span class="w">             </span><span class="c1">// 可选：换供应商</span>
+<span class="w">  </span><span class="nx">model</span><span class="o">:</span><span class="w"> </span><span class="s1">'xxx'</span><span class="p">,</span><span class="w">                </span><span class="c1">// 可选：换模型（比如用便宜模型干粗活）</span>
+<span class="p">})</span>
+</code></pre></div>
+
+<p><strong>除了这些，其它选项一律报错。</strong> 没有 <code>temperature</code>，没有"让它多想一会"的旋钮——那些是模型层面的事。</p>
+<h3 id="schema-只能用这些关键字"><code>schema</code> 只能用这些关键字</h3>
+<div class="codehilite"><pre><span></span><code>type / properties / required / additionalProperties / items / enum / const / oneOf
+</code></pre></div>
+
+<p><strong>不能用</strong> <code>pattern</code>、<code>format</code>、数值范围（<code>minimum</code>/<code>maximum</code>）。要校验格式，就让 agent 自己在提示词里遵守，拿回来再用 JS 判断。</p>
+<p>顶层必须是 <code>type: 'object'</code>。</p>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">verdict</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="s1">'判断这段代码有没有安全问题…'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">schema</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'object'</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">additionalProperties</span><span class="o">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">properties</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nx">严重程度</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'string'</span><span class="p">,</span><span class="w"> </span><span class="kr">enum</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">'高'</span><span class="p">,</span><span class="w"> </span><span class="s1">'中'</span><span class="p">,</span><span class="w"> </span><span class="s1">'低'</span><span class="p">,</span><span class="w"> </span><span class="s1">'无'</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
+<span class="w">      </span><span class="nx">问题列表</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'array'</span><span class="p">,</span><span class="w"> </span><span class="nx">items</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'string'</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nx">required</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">'严重程度'</span><span class="p">,</span><span class="w"> </span><span class="s1">'问题列表'</span><span class="p">],</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="p">})</span>
+<span class="c1">// verdict.严重程度 直接就能用，不用解析文本</span>
+</code></pre></div>
+
+<hr>
+<h2 id="四pipeline-vs-parallel最容易搞混的一个点">四、<code>pipeline</code> vs <code>parallel</code>：最容易搞混的一个点</h2>
+<h3 id="parallel-并发但有栅栏"><code>parallel</code> —— 并发，但<strong>有栅栏</strong></h3>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">结果</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">parallel</span><span class="p">([</span>
+<span class="w">  </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="s1">'任务 A'</span><span class="p">),</span>
+<span class="w">  </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="s1">'任务 B'</span><span class="p">),</span>
+<span class="w">  </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="s1">'任务 C'</span><span class="p">),</span>
+<span class="p">])</span>
+<span class="c1">// 这里：A、B、C 全都跑完了</span>
+</code></pre></div>
+
+<ul>
+<li>传的是<strong>一组零参函数</strong></li>
+<li><strong>全部完成</strong>才返回</li>
+<li>某一个抛异常 → 那一个变成 <code>null</code>，<strong>不影响别人</strong></li>
+<li><strong>只在"下一步确实需要所有结果一起"时才用</strong></li>
+</ul>
+<h3 id="pipeline-每个-item-走完全程没有栅栏"><code>pipeline</code> —— 每个 item 走完全程，<strong>没有栅栏</strong></h3>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">结果</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">pipeline</span><span class="p">(</span>
+<span class="w">  </span><span class="nx">素材列表</span><span class="p">,</span>
+<span class="w">  </span><span class="p">(</span><span class="nx">prev</span><span class="p">,</span><span class="w"> </span><span class="nx">item</span><span class="p">,</span><span class="w"> </span><span class="nx">index</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="sb">`从这份素材提取要点：</span><span class="si">${</span><span class="nx">item</span><span class="si">}</span><span class="sb">`</span><span class="p">),</span><span class="w">     </span><span class="c1">// stage 1</span>
+<span class="w">  </span><span class="p">(</span><span class="nx">prev</span><span class="p">,</span><span class="w"> </span><span class="nx">item</span><span class="p">,</span><span class="w"> </span><span class="nx">index</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="sb">`核实这些要点是否属实：</span><span class="si">${</span><span class="nx">prev</span><span class="si">}</span><span class="sb">`</span><span class="p">),</span><span class="w">   </span><span class="c1">// stage 2</span>
+<span class="w">  </span><span class="p">(</span><span class="nx">prev</span><span class="p">,</span><span class="w"> </span><span class="nx">item</span><span class="p">,</span><span class="w"> </span><span class="nx">index</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="sb">`写成 300 字成稿：</span><span class="si">${</span><span class="nx">prev</span><span class="si">}</span><span class="sb">`</span><span class="p">),</span><span class="w">        </span><span class="c1">// stage 3</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<ul>
+<li>每个 stage 收到 <code>(上一阶段的输出, 当前 item, 下标)</code></li>
+<li><strong>素材 1 跑到第 3 步时，素材 5 可能还在第 1 步</strong> —— 这是它比 <code>parallel</code> 快的原因</li>
+<li>某个 item 在某个 stage 抛错 → <strong>只有这个 item 变成 <code>null</code>，它剩下的 stage 被跳过</strong>，其他 item 照常</li>
+</ul>
+<blockquote>
+<p><strong>经验法则：多阶段处理一律用 <code>pipeline</code>。</strong> 只有"必须等所有前置结果才能开始下一步"时才用 <code>parallel</code>。</p>
+</blockquote>
+<hr>
+<h2 id="五五个可以直接改的模板">五、五个可以直接改的模板</h2>
+<h3 id="模板-1扇出调研并行-汇总">模板 1：扇出调研（并行 + 汇总）</h3>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">主题</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">名</span><span class="o">:</span><span class="w"> </span><span class="s1">'YOLO 检测'</span><span class="p">,</span><span class="w"> </span><span class="nx">要求</span><span class="o">:</span><span class="w"> </span><span class="s1">'讲清楚版本序列与选型'</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">名</span><span class="o">:</span><span class="w"> </span><span class="s1">'姿态估计'</span><span class="p">,</span><span class="w"> </span><span class="nx">要求</span><span class="o">:</span><span class="w"> </span><span class="s1">'对比主流方案与依赖难度'</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">名</span><span class="o">:</span><span class="w"> </span><span class="s1">'时序分析'</span><span class="p">,</span><span class="w"> </span><span class="nx">要求</span><span class="o">:</span><span class="w"> </span><span class="s1">'学术路线 vs 工程路线'</span><span class="w"> </span><span class="p">},</span>
+<span class="p">]</span>
+
+<span class="nx">phase</span><span class="p">(</span><span class="s1">'调研'</span><span class="p">)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">笔记</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">parallel</span><span class="p">(</span>
+<span class="w">  </span><span class="nx">主题</span><span class="p">.</span><span class="nx">map</span><span class="p">((</span><span class="nx">t</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span>
+<span class="w">    </span><span class="nx">agent</span><span class="p">(</span>
+<span class="w">      </span><span class="sb">`你是技术调研员。请调研【</span><span class="si">${</span><span class="nx">t</span><span class="p">.</span><span class="nx">名</span><span class="si">}</span><span class="sb">】，要求：</span><span class="si">${</span><span class="nx">t</span><span class="p">.</span><span class="nx">要求</span><span class="si">}</span><span class="sb">。</span>
+<span class="sb">       用 web_search 检索至少 3 次核实事实，不要编造库名和命令。</span>
+<span class="sb">       把笔记写入 D:/program/out/</span><span class="si">${</span><span class="nx">t</span><span class="p">.</span><span class="nx">名</span><span class="si">}</span><span class="sb">.md，然后只返回 5 行摘要。`</span><span class="p">,</span>
+<span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="nx">t</span><span class="p">.</span><span class="nx">名</span><span class="p">,</span><span class="w"> </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'调研'</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">),</span>
+<span class="w">  </span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">完成</span><span class="o">:</span><span class="w"> </span><span class="nx">笔记</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="nb">Boolean</span><span class="p">).</span><span class="nx">length</span><span class="p">,</span><span class="w"> </span><span class="nx">总数</span><span class="o">:</span><span class="w"> </span><span class="nx">主题</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+
+<h3 id="模板-2生产者验证者这一步最值钱">模板 2：生产者—验证者（这一步最值钱）</h3>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="nx">phase</span><span class="p">(</span><span class="s1">'产出'</span><span class="p">)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">初稿</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="s1">'写出第 1 节的内容，存到 D:/program/out/sec1.md'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'产出'</span><span class="w"> </span><span class="p">})</span>
+
+<span class="nx">phase</span><span class="p">(</span><span class="s1">'审校'</span><span class="p">)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">意见</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span>
+<span class="w">  </span><span class="sb">`你是技术审校，任务是**找出错误**，找到越多越好。</span>
+<span class="sb">   请 read 文件 D:/program/out/sec1.md，逐条核对：</span>
+<span class="sb">   1) 有没有不存在的库名/命令/版本号（用 web_search 核实可疑点）</span>
+<span class="sb">   2) 有没有前后自相矛盾</span>
+<span class="sb">   3) 有没有明显缺口</span>
+<span class="sb">   把问题清单写入 D:/program/out/sec1-review.md，只返回最严重的 3 条。`</span><span class="p">,</span>
+<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">'审校 · 第 1 节'</span><span class="p">,</span><span class="w"> </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'审校'</span><span class="w"> </span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">初稿长度</span><span class="o">:</span><span class="w"> </span><span class="nx">初稿</span><span class="o">?</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">审校意见</span><span class="o">:</span><span class="w"> </span><span class="nx">意见</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+
+<h3 id="模板-3结构化产出要表格不要散文">模板 3：结构化产出（要表格不要散文）</h3>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">候选</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s1">'方案 A'</span><span class="p">,</span><span class="w"> </span><span class="s1">'方案 B'</span><span class="p">,</span><span class="w"> </span><span class="s1">'方案 C'</span><span class="p">]</span>
+
+<span class="nx">phase</span><span class="p">(</span><span class="s1">'评估'</span><span class="p">)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">评估</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">parallel</span><span class="p">(</span>
+<span class="w">  </span><span class="nx">候选</span><span class="p">.</span><span class="nx">map</span><span class="p">((</span><span class="nx">c</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span>
+<span class="w">    </span><span class="nx">agent</span><span class="p">(</span><span class="sb">`评估「</span><span class="si">${</span><span class="nx">c</span><span class="si">}</span><span class="sb">」在 8GB 显存、Windows、Python 3.12 下的可行性。`</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="nx">c</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'评估'</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">schema</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'object'</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">additionalProperties</span><span class="o">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">properties</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nx">方案</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'string'</span><span class="w"> </span><span class="p">},</span>
+<span class="w">          </span><span class="nx">可行性</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'string'</span><span class="p">,</span><span class="w"> </span><span class="kr">enum</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">'可行'</span><span class="p">,</span><span class="w"> </span><span class="s1">'勉强'</span><span class="p">,</span><span class="w"> </span><span class="s1">'不可行'</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
+<span class="w">          </span><span class="nx">理由</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'string'</span><span class="w"> </span><span class="p">},</span>
+<span class="w">          </span><span class="nx">主要风险</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'array'</span><span class="p">,</span><span class="w"> </span><span class="nx">items</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'string'</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nx">required</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">'方案'</span><span class="p">,</span><span class="w"> </span><span class="s1">'可行性'</span><span class="p">,</span><span class="w"> </span><span class="s1">'理由'</span><span class="p">,</span><span class="w"> </span><span class="s1">'主要风险'</span><span class="p">],</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">    </span><span class="p">}),</span>
+<span class="w">  </span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="c1">// 现在是对象数组，可以直接用 JS 处理</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">推荐</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">评估</span><span class="p">.</span><span class="nx">filter</span><span class="p">((</span><span class="nx">x</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">x</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">x</span><span class="p">.</span><span class="nx">可行性</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">'可行'</span><span class="p">).</span><span class="nx">map</span><span class="p">((</span><span class="nx">x</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">x</span><span class="p">.</span><span class="nx">方案</span><span class="p">)</span>
+<span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">全部</span><span class="o">:</span><span class="w"> </span><span class="nx">评估</span><span class="p">,</span><span class="w"> </span><span class="nx">推荐</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+
+<h3 id="模板-4流水线批量素材走同一套流程">模板 4：流水线（批量素材走同一套流程）</h3>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">文件</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s1">'a.md'</span><span class="p">,</span><span class="w"> </span><span class="s1">'b.md'</span><span class="p">,</span><span class="w"> </span><span class="s1">'c.md'</span><span class="p">,</span><span class="w"> </span><span class="s1">'d.md'</span><span class="p">,</span><span class="w"> </span><span class="s1">'e.md'</span><span class="p">]</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">结果</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">pipeline</span><span class="p">(</span>
+<span class="w">  </span><span class="nx">文件</span><span class="p">,</span>
+<span class="w">  </span><span class="p">(</span><span class="nx">prev</span><span class="p">,</span><span class="w"> </span><span class="nx">文件路径</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="sb">`读取 </span><span class="si">${</span><span class="nx">文件路径</span><span class="si">}</span><span class="sb">，提取 3-5 条可验证的事实断言，返回列表文本。`</span><span class="p">),</span>
+<span class="w">  </span><span class="p">(</span><span class="nx">prev</span><span class="p">,</span><span class="w"> </span><span class="nx">文件路径</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="sb">`逐条核实下面的断言是否属实，用 web_search，标出错误项：\n</span><span class="si">${</span><span class="nx">prev</span><span class="si">}</span><span class="sb">`</span><span class="p">),</span>
+<span class="w">  </span><span class="p">(</span><span class="nx">prev</span><span class="p">,</span><span class="w"> </span><span class="nx">文件路径</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="sb">`根据核实结果，把 </span><span class="si">${</span><span class="nx">文件路径</span><span class="si">}</span><span class="sb"> 改写为一份准确的中文摘要，写入 D:/program/out/clean-</span><span class="si">${</span><span class="nx">文件路径</span><span class="si">}</span><span class="sb">`</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="k">return</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">总条数</span><span class="o">:</span><span class="w"> </span><span class="nx">文件</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">成功条数</span><span class="o">:</span><span class="w"> </span><span class="nx">结果</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="nb">Boolean</span><span class="p">).</span><span class="nx">length</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">失败的文件</span><span class="o">:</span><span class="w"> </span><span class="nx">文件</span><span class="p">.</span><span class="nx">filter</span><span class="p">((</span><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">i</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="o">!</span><span class="nx">结果</span><span class="p">[</span><span class="nx">i</span><span class="p">]),</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<blockquote>
+<p>注意最后那个 <code>失败的文件</code> —— <strong>一定要把失败项报出来</strong>。<code>filter(Boolean)</code> 会把失败静默吞掉，看起来一切正常。</p>
+</blockquote>
+<h3 id="模板-5两阶段先发散再基于结果收敛">模板 5：两阶段（先发散，再基于结果收敛）</h3>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="nx">phase</span><span class="p">(</span><span class="s1">'发散'</span><span class="p">)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">视角</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">parallel</span><span class="p">([</span>
+<span class="w">  </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="s1">'从"性能"角度分析这个方案的问题'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'发散'</span><span class="w"> </span><span class="p">}),</span>
+<span class="w">  </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="s1">'从"安全"角度分析这个方案的问题'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'发散'</span><span class="w"> </span><span class="p">}),</span>
+<span class="w">  </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="s1">'从"可维护性"角度分析这个方案的问题'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'发散'</span><span class="w"> </span><span class="p">}),</span>
+<span class="p">])</span>
+
+<span class="nx">phase</span><span class="p">(</span><span class="s1">'收敛'</span><span class="p">)</span>
+<span class="c1">// 这里需要所有视角一起 —— 这种才适合用 parallel + 后续阶段</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">结论</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span>
+<span class="w">  </span><span class="sb">`下面是三个独立视角的分析，请综合成一份问题清单，按优先级排序：\n\n</span><span class="si">${</span><span class="nx">视角</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="nb">Boolean</span><span class="p">).</span><span class="nx">join</span><span class="p">(</span><span class="s1">'\n\n---\n\n'</span><span class="p">)</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span>
+<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">'综合'</span><span class="p">,</span><span class="w"> </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'收敛'</span><span class="w"> </span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="k">return</span><span class="w"> </span><span class="nx">结论</span>
+</code></pre></div>
+
+<hr>
+<h2 id="六写-workflow-的八条经验">六、写 workflow 的八条经验</h2>
+<ol>
+<li>
+<p><strong>子 agent 看不到你的对话。</strong> 提示词必须<strong>自包含</strong>——把背景、路径、要求、输出格式全写进去。
+   （对比：<code>subagent_fork</code> 才会继承对话，但 workflow 里的 <code>agent()</code> 是全新的。）</p>
+</li>
+<li>
+<p><strong>让 agent 自己把大产物写进文件，只让它返回短摘要。</strong>
+   否则几万字的调研结果会原路灌回来，把你自己撑爆。<strong>文件是给未来的你的，摘要是给现在的你的。</strong></p>
+</li>
+<li>
+<p><strong>给每个 agent 划清互斥的边界。</strong> "你只负责 X，不要碰 Y"——不然 6 个 agent 会重复劳动。</p>
+</li>
+<li>
+<p><strong>强制统一输出格式。</strong> 6 份格式各异的笔记，汇总时你会想哭。</p>
+</li>
+<li>
+<p><strong>永远配一个验证者。</strong> 这是多 agent 相对单 agent 唯一"真·变强"的地方。见模板 2。</p>
+</li>
+<li>
+<p><strong>控制并发数量。</strong> 6-8 路并行是甜点区。20 路同时开，你既看不懂也管不住，还容易触发上限把整个脚本弄死。</p>
+</li>
+<li>
+<p><strong><code>return</code> 要返回可检查的东西。</strong> 不要只 <code>return '成功'</code>。
+   返回 <code>{ 完成数, 总数, 失败项 }</code>，主 agent 才能发现"其实挂了两个"。</p>
+</li>
+<li>
+<p><strong>先在脑子里跑一遍。</strong> 问自己：如果某个 agent 返回 <code>null</code>，我的脚本会崩吗？
+   <code>.filter(Boolean)</code>、<code>?? '默认值'</code>、<code>if (!结果) continue</code> —— 这三招能挡掉大部分崩溃。</p>
+</li>
+</ol>
+<hr>
+<h2 id="七怎么运行">七、怎么运行</h2>
+<p><code>workflow</code> 工具需要两个参数：</p>
+<p><strong><code>meta</code></strong> —— 身份信息（纯 JSON，不是代码）：</p>
+<div class="codehilite"><pre data-lang="json"><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"badminton-ai-research"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"六路并行调研，再由一个审校 agent 交叉核验"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"whenToUse"</span><span class="p">:</span><span class="w"> </span><span class="s2">"需要在一个陌生领域快速铺开资料时"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"phases"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"调研"</span><span class="p">,</span><span class="w"> </span><span class="nt">"detail"</span><span class="p">:</span><span class="w"> </span><span class="s2">"6 个 agent 各自负责一个专题"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"审校"</span><span class="p">,</span><span class="w"> </span><span class="nt">"detail"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1 个 agent 读完全部笔记找错"</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<blockquote>
+<p><code>phases</code> 里的 <code>title</code> 必须和脚本里 <code>phase('...')</code> 的字符串<strong>完全一致</strong>，否则进度显示对不上。</p>
+</blockquote>
+<p><strong><code>script</code></strong> —— 脚本正文（只要函数体，<strong>不要</strong> <code>export const meta</code>，<strong>不要</strong> TypeScript）：</p>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">结果</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="s1">'...'</span><span class="p">)</span><span class="w">     </span><span class="c1">// 顶层 await 可以直接用</span>
+<span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">结果</span><span class="w"> </span><span class="p">}</span><span class="w">                     </span><span class="c1">// 最后一定要 return</span>
+</code></pre></div>
+
+<p><strong>调用是前台阻塞的</strong>：这个工具调用会一直等到整个脚本跑完才返回。</p>
+<hr>
+<h2 id="八你要写的第一个-workflow建议">八、你要写的第一个 workflow（建议）</h2>
+<p><strong>别从大项目开始。</strong> 按这个顺序练：</p>
+<table>
+<thead>
+<tr>
+<th>第几次</th>
+<th>做什么</th>
+<th>学到什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>2 个 agent 并行，各写一段话</td>
+<td><code>parallel</code> 的基本用法</td>
+</tr>
+<tr>
+<td>2</td>
+<td>1 个写 + 1 个挑错</td>
+<td>验证者模式的价值</td>
+</tr>
+<tr>
+<td>3</td>
+<td>3 个 agent 输出带 <code>schema</code> 的对象</td>
+<td>结构化返回</td>
+</tr>
+<tr>
+<td>4</td>
+<td>5 个文件走 <code>pipeline</code> 三步</td>
+<td>流水线</td>
+</tr>
+<tr>
+<td>5</td>
+<td>拿你自己的真实任务拆一次</td>
+<td>边界怎么划</td>
+</tr>
+</tbody>
+</table>
+<p><strong>每练一次，就打开 GUI 看那几张小卡片</strong>：谁在跑、跑了多久、返回了什么。<strong>看得见的编排，才是真的学会了。</strong></p>
+<hr>
+<h2 id="九可运行的例子">九、可运行的例子</h2>
+<p><code>examples/</code> 目录下有四份可以直接改的脚本，从简单到复杂：</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>练什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>01-hello-fanout.js</code></td>
+<td>最小扇出：3 个 agent 并行写一段话</td>
+</tr>
+<tr>
+<td><code>02-producer-verifier.js</code></td>
+<td>生产者 + 验证者：一个写，一个挑错</td>
+</tr>
+<tr>
+<td><code>03-structured-compare.js</code></td>
+<td>结构化返回：<code>schema</code> + 汇总成表</td>
+</tr>
+<tr>
+<td><code>04-research-pipeline.js</code></td>
+<td>完整流水线：调研 → 核实 → 成稿 + 失败项报告</td>
+</tr>
+</tbody>
+</table>
+<p><strong>用法</strong>：把文件内容复制进 <code>workflow</code> 工具的 <code>script</code> 参数，<code>meta</code> 按上面格式填。</p>
+<div class="pager">
+<a class="prev" href="p1-03.html"><span class="lbl">上一篇</span><span class="ttl">手把手搭建 preset</span></a>
+<a class="next" href="p1-05.html"><span class="lbl">下一篇</span><span class="ttl">实战复盘：43 条错误</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

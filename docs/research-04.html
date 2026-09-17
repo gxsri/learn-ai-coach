@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>调研 04 · 骨架时序 · 羽毛球 AI 教练</title>
+<meta name="description" content="ST-GCN/PoseC3D 学术路线 vs 特征工程 + sklearn 工程路线。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html" class="current">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">代码与资料</span></div>
+<h1 id="04-骨架时序分析与动作识别">04 · 骨架时序分析与动作识别</h1>
+<blockquote>
+<p>面向：会用 AI 助手写代码、有 RTX 4060 Laptop 8GB、目标做羽毛球运动表现分析的学习者。</p>
+</blockquote>
+<h2 id="一句话结论">一句话结论</h2>
+<p>几百段自录视频、无标注时，<strong>学术路线（ST-GCN / CTR-GCN / PoseC3D）不是你的训练目标</strong>；能跑通并给出可解释反馈的是工程路线——骨架降维成关节角度 / 角速度 / 相对位移 / 重心轨迹，滑窗 + 峰值检测定位击球瞬间，再用 DTW 模板匹配或 sklearn 分类器做小样本分类。</p>
+<hr>
+<h2 id="核心概念">核心概念</h2>
+<h3 id="1-骨架序列长什么样">1. 骨架序列长什么样</h3>
+<ul>
+<li><strong>NTU-RGB+D 格式</strong>：官方数据是每帧存 <code>bodyID</code> + 25 个关节的 3D 坐标，整个动作序列 ≈ <code>(帧数, 25, 3)</code>；用于 GCN 时按 <code>(C, T, V, M)</code> 组织（C=坐标/joint-bone 通道，T=帧，V=关节，M=人数）<a href="https://github.com/shahroudy/NTURGB-D">NTU-RGB+D 官方仓库</a>。</li>
+<li><strong>MediaPipe 格式</strong>：33 个关键点，<code>world_landmarks</code> 是以髋部中心为原点的米制 3D 坐标，比 2D 像素坐标更适合算角度<a href="https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/python">MediaPipe Pose Landmarker (Python)</a>。</li>
+</ul>
+<p>两套格式关节数不同，<strong>跨格式搬运必须写映射表，不能直接喂给预训练模型</strong>。</p>
+<h3 id="2-学术路线吃什么">2. 学术路线吃什么</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>输入表示</th>
+<th>代表精度（NTU60 XSub）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ST-GCN</td>
+<td>图序列 <code>(C,T,V,M)</code></td>
+<td>joint 88.95 / 四流 92.34</td>
+</tr>
+<tr>
+<td>2s-AGCN</td>
+<td>joint + bone 双流</td>
+<td>joint 88.60 / bone 91.59 / 四流 92.34</td>
+</tr>
+<tr>
+<td>STGCN++</td>
+<td>同 ST-GCN，架构改良</td>
+<td>joint 89.29 / bone 92.30</td>
+</tr>
+<tr>
+<td>PoseC3D</td>
+<td>3D 热力图体（不再是图）</td>
+<td>keypoint 93.6 / fusion 94.0</td>
+</tr>
+<tr>
+<td>CTR-GCN</td>
+<td>图 + 通道级拓扑细化</td>
+<td>ICCV 2021，<a href="https://openaccess.thecvf.com//content/ICCV2021/papers/Chen_Channel-Wise_Topology_Refinement_Graph_Convolution_for_Skeleton-Based_Action_Recognition_ICCV_2021_paper.pdf">论文</a></td>
+</tr>
+<tr>
+<td>Hyperformer</td>
+<td>超图 + Transformer</td>
+<td>见 PYSKL 系列工作</td>
+</tr>
+</tbody>
+</table>
+<p>以上数据来自 <a href="https://mmaction2.readthedocs.io/en/stable/model_zoo/skeleton.html">MMAction2 Skeleton Model Zoo</a>（文档版本 1.2.0）。<strong>注意这些数字的训练配置是 8 张 GPU、100 帧均匀采样、"10 clips" 测试协议</strong>——这是几十万样本规模下的成绩，不是几百条视频能复现的。</p>
+<h3 id="3-工程路线的可解释特征">3. 工程路线的可解释特征</h3>
+<ul>
+<li><strong>关节角度</strong>：<code>θ = arccos( (a·b) / (|a||b|) )</code>，a、b 是以某关节为顶点指向两侧的向量；羽毛球重点看持拍侧肘角、肩角、躯干扭转角。</li>
+<li><strong>角速度</strong>：角度逐帧差分。抖动大说明姿态估计不稳。</li>
+<li><strong>关键点相对位移</strong>：手腕相对肩 / 髋的位移，捕捉挥拍轨迹幅度。</li>
+<li><strong>重心轨迹</strong>：髋中心（MediaPipe 的 <code>world_landmarks</code> 原点）位移与速度。</li>
+<li><strong>节奏 / 时序统计量</strong>：动作时长、峰值数量与间隔、起止速度比。</li>
+</ul>
+<h3 id="4-时序分割与对齐">4. 时序分割与对齐</h3>
+<ul>
+<li><strong>滑窗 + 峰值检测</strong>：对"手腕速度"这类一维信号平滑后找局部极大值，就是最朴素的<strong>击球瞬间检测</strong>。手腕类动作识别普遍用轻量滑窗先定位感兴趣区间再分类<a href="https://dl.acm.org/doi/full/10.1145/3772318.3790998">BadminSense (CHI 2026)</a>。</li>
+<li><strong>DTW（动态时间规整）</strong>：不同时长的序列不能直接算欧氏距离。DTW 构造 <code>n×m</code> 代价矩阵，用动态规划找一条从 <code>(0,0)</code> 到 <code>(n,m)</code> 的单调连续路径，把两个序列"拉伸对齐"后累加距离，得到与时长无关的相似度。<code>window</code> 限制弯曲幅度，<code>use_pruning</code> 剪枝加速<a href="https://pypi.org/project/dtaidistance/">dtaiDistance</a>。</li>
+<li>常见误解：DTW 是<strong>度量</strong>不是分类器——它只告诉你"这段和模板差多少"，分类要靠最近邻模板或把 DTW 距离矩阵喂给 KNN / 聚类。</li>
+</ul>
+<hr>
+<h2 id="可执行的最短路径真实命令">可执行的最短路径（真实命令）</h2>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="c"># 1. 建环境（Python 3.10+ 起，mediapipe 1.0.1 支持 3.9–3.12；tslearn 0.9.0 要求 3.10+）</span>
+<span class="n">conda</span> <span class="n">create</span> <span class="p">-</span><span class="n">-name</span> <span class="n">ai-coach</span> <span class="n">python</span><span class="p">=</span><span class="n">3</span><span class="p">.</span><span class="n">11</span> <span class="n">-y</span>
+<span class="n">conda</span> <span class="n">activate</span> <span class="n">ai-coach</span>
+
+<span class="c"># 2. 装 PyTorch（4050/4060 是 Ada sm_89，需要 CUDA 11.8 以上；cu124/cu128 都行）</span>
+<span class="c">#    版本对应关系以官方安装页面为准，不要照抄别人博客里的版本号</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">torch</span> <span class="n">torchvision</span> <span class="p">-</span><span class="n">-index-url</span> <span class="n">https</span><span class="p">://</span><span class="n">download</span><span class="p">.</span><span class="n">pytorch</span><span class="p">.</span><span class="n">org</span><span class="p">/</span><span class="n">whl</span><span class="p">/</span><span class="n">cu124</span>
+
+<span class="c"># 3. 提取骨架 + 特征 + 分类，这一条链路上全部需要的库</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">mediapipe</span>          <span class="c"># 1.0.1，33 关键点，world_landmarks 为米制 3D</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">numpy</span> <span class="n">scipy</span> <span class="n">pandas</span> <span class="n">matplotlib</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">scikit-learn</span>       <span class="c"># SVM / RandomForest，特征向量路线主力</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">xgboost</span>            <span class="c"># 3.1.x，小样本表格数据通常比 SVM 更稳</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">dtaidistance</span>       <span class="c"># 2.5.1，DTW 的 C 实现，比纯 Python 快 30–300 倍</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">tslearn</span>            <span class="c"># 0.9.0，DTW 核 SVM、TimeSeriesKMeans、DTW 重心平均</span>
+</code></pre></div>
+
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="c1"># 骨架 → 特征 → 击球瞬间 → DTW 匹配 的最小骨架代码</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span><span class="o">,</span><span class="w"> </span><span class="nn">cv2</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mediapipe</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mediapipe.tasks</span><span class="w"> </span><span class="kn">import</span> <span class="n">python</span> <span class="k">as</span> <span class="n">mp_python</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mediapipe.tasks.python</span><span class="w"> </span><span class="kn">import</span> <span class="n">vision</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.signal</span><span class="w"> </span><span class="kn">import</span> <span class="n">find_peaks</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dtaidistance</span><span class="w"> </span><span class="kn">import</span> <span class="n">dtw</span>
+
+<span class="c1"># 1) 逐帧提骨架（mediapipe 1.x 用 Tasks API，需要单独下载 pose_landmarker.task 模型文件）</span>
+<span class="n">opts</span> <span class="o">=</span> <span class="n">vision</span><span class="o">.</span><span class="n">PoseLandmarkerOptions</span><span class="p">(</span>
+    <span class="n">base_options</span><span class="o">=</span><span class="n">mp_python</span><span class="o">.</span><span class="n">BaseOptions</span><span class="p">(</span><span class="n">model_asset_path</span><span class="o">=</span><span class="s2">"pose_landmarker_full.task"</span><span class="p">),</span>
+    <span class="n">running_mode</span><span class="o">=</span><span class="n">vision</span><span class="o">.</span><span class="n">RunningMode</span><span class="o">.</span><span class="n">VIDEO</span><span class="p">,</span>
+    <span class="n">num_poses</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">landmarker</span> <span class="o">=</span> <span class="n">vision</span><span class="o">.</span><span class="n">PoseLandmarker</span><span class="o">.</span><span class="n">create_from_options</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">angle</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>                     <span class="c1"># b 为顶点，如 (肩, 肘, 腕) 求肘角</span>
+    <span class="n">v1</span><span class="p">,</span> <span class="n">v2</span> <span class="o">=</span> <span class="n">a</span> <span class="o">-</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span> <span class="o">-</span> <span class="n">b</span>
+    <span class="n">cos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">v1</span><span class="p">,</span> <span class="n">v2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">v1</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">v2</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">degrees</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">cos</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)))</span>
+
+<span class="c1"># 2) 击球瞬间：手腕速度的峰值</span>
+<span class="n">wrist</span> <span class="o">=</span> <span class="n">seq</span><span class="p">[:,</span> <span class="n">WRIST_IDX</span><span class="p">,</span> <span class="p">:]</span>                      <span class="c1"># (T, 3) 世界坐标</span>
+<span class="n">speed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">wrist</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">speed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">convolve</span><span class="p">(</span><span class="n">speed</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span> <span class="o">/</span> <span class="mi">5</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"same"</span><span class="p">)</span>   <span class="c1"># 平滑，抑制抖动误检</span>
+<span class="n">hits</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">find_peaks</span><span class="p">(</span><span class="n">speed</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">speed</span><span class="p">,</span> <span class="mi">90</span><span class="p">),</span> <span class="n">distance</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+
+<span class="c1"># 3) 对齐不同时长：把每段动作重采样到固定帧数，再算 DTW 距离</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">resample</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">60</span><span class="p">):</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="p">));</span> <span class="n">tn</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">a</span><span class="p">[:,</span> <span class="n">d</span><span class="p">])</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="n">d</span> <span class="o">=</span> <span class="n">dtw</span><span class="o">.</span><span class="n">distance_fast</span><span class="p">(</span><span class="n">resample</span><span class="p">(</span><span class="n">seq_a</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">double</span><span class="p">),</span>
+                      <span class="n">resample</span><span class="p">(</span><span class="n">seq_b</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">double</span><span class="p">),</span>
+                      <span class="n">use_pruning</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+
+<p>想跑学术基线，装 MMAction2 走官方流程：</p>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="n">pip</span> <span class="n">install</span> <span class="n">-U</span> <span class="n">openmim</span>
+<span class="n">mim</span> <span class="n">install</span> <span class="n">mmengine</span>
+<span class="n">mim</span> <span class="n">install</span> <span class="n">mmcv</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">mmaction2</span>          <span class="c"># 或 git clone 后 pip install -v -e .</span>
+<span class="n">python</span> <span class="n">tools</span><span class="p">/</span><span class="n">train</span><span class="p">.</span><span class="n">py</span> <span class="n">configs</span><span class="p">/</span><span class="n">skeleton</span><span class="p">/</span><span class="n">stgcn</span><span class="p">/</span><span class="n">stgcn_8xb16-joint-u100</span><span class="p">-</span><span class="n">80e_ntu60-xsub-keypoint</span><span class="p">-</span><span class="n">2d</span><span class="p">.</span><span class="n">py</span> <span class="p">-</span><span class="n">-seed</span> <span class="n">0</span>
+<span class="n">python</span> <span class="n">tools</span><span class="p">/</span><span class="n">test</span><span class="p">.</span><span class="n">py</span>  <span class="n">configs</span><span class="p">/</span><span class="n">skeleton</span><span class="p">/</span><span class="n">stgcn</span><span class="p">/</span><span class="n">stgcn_8xb16-joint-u100</span><span class="p">-</span><span class="n">80e_ntu60-xsub-keypoint</span><span class="p">-</span><span class="n">2d</span><span class="p">.</span><span class="n">py</span> <span class="n">checkpoints</span><span class="p">/</span><span class="n">SOME_CHECKPOINT</span><span class="p">.</span><span class="n">pth</span> <span class="p">-</span><span class="n">-dump</span> <span class="n">result</span><span class="p">.</span><span class="n">pkl</span>
+</code></pre></div>
+
+<p>命令与配置路径均取自 <a href="https://mmaction2.readthedocs.io/en/stable/get_started/installation.html">MMAction2 官方安装文档</a> 与 <a href="https://mmaction2.readthedocs.io/en/stable/model_zoo/skeleton.html">Skeleton Model Zoo</a>。PYSKL 是另一条备选（ST-GCN++ 就在这里，PYSKL v0.2 报告见 <a href="https://arxiv.org/abs/2205.09443">arXiv 2205.09443</a>）。</p>
+<hr>
+<h2 id="两条路线适用条件对比">两条路线适用条件对比</h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>学术路线（GCN / PoseC3D）</th>
+<th>工程路线（特征 + DTW / 分类器）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>需要的样本量</td>
+<td>每类数千条起，NTU120 有 113,945 样本 / 120 类</td>
+<td>每类 30–100 条即可起步</td>
+</tr>
+<tr>
+<td>标注要求</td>
+<td>整段视频一个动作类别标签，动作需预先切好</td>
+<td>只需标"击球在第几帧" + 类别</td>
+</tr>
+<tr>
+<td>8GB 显存可行性</td>
+<td>单卡 batch 16 的 ST-GCN 尚可；PoseC3D（SlowOnly-R50）吃紧</td>
+<td>CPU 都能跑</td>
+</tr>
+<tr>
+<td>训练时间</td>
+<td>数小时到数天</td>
+<td>秒级到分钟级</td>
+</tr>
+<tr>
+<td>可解释性</td>
+<td>差，只能给类别和置信度</td>
+<td>好，能说"你的肘角比模板小 15°"</td>
+</tr>
+<tr>
+<td>对姿态估计噪声</td>
+<td>GCN 敏感，PoseC3D 较鲁棒</td>
+<td>同样敏感，但平滑 + 角度特征能压住</td>
+</tr>
+<tr>
+<td>迁移到羽毛球</td>
+<td>需要重新标注目标域，NTU 里没有羽毛球类别</td>
+<td>直接定义羽毛球专属特征，无迁移问题</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论：自己录几百段、无大规模标注 → 工程路线为主。学术路线只做两件事</strong>：借 PoseC3D 那类对噪声鲁棒的表示思路，以及在有几千条标注后再考虑微调。</p>
+<h3 id="一步步怎么做">一步步怎么做</h3>
+<ol>
+<li><strong>固定拍摄协议</strong>：机位、距离、高度、帧率写进 README，否则特征不可比。</li>
+<li><strong>切分</strong>：用击球声或人工粗标，把录像切成"单次击球"片段（建议击球前 0.5s ~ 后 0.5s）。</li>
+<li><strong>提骨架</strong>：MediaPipe 逐帧跑，存成 <code>(T, 33, 3)</code> 的 <code>.npy</code>，留一份可视化供人工检查。</li>
+<li><strong>清洗</strong>：<code>visibility</code> / <code>presence</code> 过低的帧插值补回；坐标做 5 帧滑动平均。</li>
+<li><strong>特征化</strong>：每段算 10–20 维汇总特征（各关节角均值 / 极值 / 到达极值的时刻、角速度峰值、重心位移、时长）。</li>
+<li><strong>定位击球</strong>：手腕速度峰值检测，人工校验 20 段，调 <code>height</code> / <code>distance</code>。</li>
+<li><strong>分类</strong>：先 <code>RandomForestClassifier</code> 建立 baseline（用 <code>GroupKFold</code> 按"人 / 场次"分组），再上 XGBoost，最后才考虑 1D-CNN / GRU。</li>
+<li><strong>模板匹配</strong>：每类取 5–10 条标准动作作 DTW 模板，输出"离哪个模板最近、差在哪几个特征"。</li>
+<li>到这一步之后，再拿几千条数据去微调预训练 GCN。</li>
+</ol>
+<hr>
+<h2 id="选型建议针对-8GB-显存">选型建议（针对 8GB 显存）</h2>
+<ul>
+<li><strong>8GB 是明确的约束线</strong>。PoseC3D 官方配置是 8×GPU、batch 16、uniform 48 帧，单卡 8GB 大概率 OOM；ST-GCN / STGCN++（1.39M–3.1M 参数）单卡 batch 8–16 更现实。</li>
+<li><strong>RTX 4060 Laptop 是 Ada 架构 sm_89，必须选 CUDA 11.8 及以上的 PyTorch wheel</strong>（cu124 稳妥）。装完先验证：<code>python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"</code>。</li>
+<li><strong>不要为这个任务买云 GPU</strong>。瓶颈是标注量和拍摄规范，不是算力。</li>
+<li>GPU 只在训练 GRU / 微调 GCN 时才需要，特征工程全在 CPU 上跑。</li>
+</ul>
+<hr>
+<h2 id="常见坑">常见坑</h2>
+<ol>
+<li><strong>把 NTU 预训练权重直接用在羽毛球上</strong>。NTU 的 60/120 类里没有羽毛球挥拍，输出层完全不对；且关节定义（25 vs 33）不一致，必须先映射并重训分类头。</li>
+<li><strong>用 2D 像素坐标算角度</strong>。透视畸变带来系统性偏差，用 <code>world_landmarks</code>，或至少先按身体尺度归一化。</li>
+<li><strong>不按"人/场次"分组做交叉验证</strong>。同一视频的相邻帧高度相似，随机划分会让准确率虚高 20 个点以上。</li>
+<li><strong>直接对原始骨架序列算 DTW</strong>。维度高、噪声大，DTW 会退化；先降维成角度/速度再算。</li>
+<li><strong>混淆"击球瞬间检测"和"动作分类"</strong>。前者是时序分割（滑窗 + 峰值），后者是分类；先做对前者，否则分类器学的是"哪几帧像挥拍"而不是"这拍是什么球"。</li>
+<li><strong>mmcv 与 torch 版本不匹配</strong>。用 <code>mim install mmcv</code> 而不是 <code>pip install mmcv</code>，否则 import 时直接崩。</li>
+<li><strong>MediaPipe 1.x 需要单独下载 <code>.task</code> 模型文件</strong>，它不在 pip 包里。</li>
+</ol>
+<hr>
+<h2 id="参考链接">参考链接</h2>
+<ul>
+<li><a href="https://github.com/shahroudy/NTURGB-D">NTU RGB+D 数据集官方仓库</a> — 骨架文件格式与规模</li>
+<li><a href="https://mmaction2.readthedocs.io/en/stable/model_zoo/skeleton.html">MMAction2 Skeleton-based Action Recognition Models</a> — ST-GCN / 2s-AGCN / STGCN++ / PoseC3D 的精度、配置、checkpoint</li>
+<li><a href="https://mmaction2.readthedocs.io/en/stable/get_started/installation.html">MMAction2 安装文档</a> — openmim / mmcv 安装与排错</li>
+<li><a href="https://openaccess.thecvf.com/content_CVPR_2019/html/Shi_Two-Stream_Adaptive_Graph_Convolutional_Networks_for_Skeleton-Based_Action_Recognition_CVPR_2019_paper.html">2s-AGCN (CVPR 2019)</a> — 双流与自适应图</li>
+<li><a href="https://openaccess.thecvf.com//content/ICCV2021/papers/Chen_Channel-Wise_Topology_Refinement_Graph_Convolution_for_Skeleton-Based_Action_Recognition_ICCV_2021_paper.pdf">CTR-GCN (ICCV 2021)</a> — 通道级拓扑细化</li>
+<li><a href="https://arxiv.org/abs/2104.13586">PoseC3D / Revisiting Skeleton-based Action Recognition</a> — 热力图体路线</li>
+<li><a href="https://arxiv.org/abs/2205.09443">PYSKL: Towards Good Practices for Skeleton Action Recognition</a> — ST-GCN++ 与统一工具箱</li>
+<li><a href="https://pypi.org/project/dtaidistance/">dtaidistance on PyPI</a> — DTW 的 C 实现、<code>window</code> / <code>use_pruning</code> 参数</li>
+<li><a href="https://tslearn.readthedocs.io/">tslearn 文档</a> — DTW 核、<code>KNeighborsTimeSeriesClassifier</code>、<code>TimeSeriesKMeans</code></li>
+<li><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html">scipy.signal.find_peaks</a> — 峰值检测参数</li>
+<li><a href="https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/python">MediaPipe Pose Landmarker (Python)</a> — Tasks API 与 world landmarks</li>
+<li><a href="https://ieeexplore.ieee.org/abstract/document/10490491">Badminton Action Classification Based on Human Skeleton Data Extracted by AlphaPose (IEEE)</a> — 骨架特征做羽毛球动作分类的先例</li>
+<li><a href="https://dl.acm.org/doi/full/10.1145/3772318.3790998">BadminSense (CHI 2026)</a> — 滑窗定位 ROI + 击球检测</li>
+</ul>
+<hr>
+<h2 id="给-AI-编程助手的提示词">给 AI 编程助手的提示词</h2>
+<div class="codehilite"><pre><span></span><code>我在做羽毛球击球动作分析，数据是自己录的约 300 段视频（无大规模标注），显卡 RTX 4060 Laptop 8GB。
+请按"骨架提取 → 特征化 → 击球瞬间检测 → 小样本分类"的顺序给方案，不要一上来推荐 ST-GCN/CTR-GCN 微调。
+环境：mediapipe 1.x（Tasks API，需单独 .task 模型文件）、scikit-learn、dtaidistance、tslearn。
+必须检查：① 是不是用 world_landmarks 而不是 2D 像素坐标算角度；② 交叉验证有没有按"人/场次"分组；
+③ 击球检测的 find_peaks 参数（height/distance）有没有在样本上验证；④ 降维后的特征维度是否 &lt; 30。
+已知坑：NTU 预训练权重不认 MediaPipe 的 33 关节；同一视频内相邻帧相似会造成准确率虚高。
+每写一段代码，请说明输入输出 shape 和怎么用 20 段视频做快速 sanity check。
+</code></pre></div>
+<div class="pager">
+<a class="prev" href="research-03.html"><span class="lbl">上一篇</span><span class="ttl">调研 03 · 姿态估计</span></a>
+<a class="next" href="research-05.html"><span class="lbl">下一篇</span><span class="ttl">调研 05 · 羽毛球专项</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

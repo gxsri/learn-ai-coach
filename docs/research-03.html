@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>调研 03 · 姿态估计 · 羽毛球 AI 教练</title>
+<meta name="description" content="六种方案对比、COCO-17 索引、3D 值不值得学。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html" class="current">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">代码与资料</span></div>
+<h1 id="03-姿态估计骨架提取技术全景">03 姿态估计（骨架提取）技术全景</h1>
+<blockquote>
+<p>面向：羽毛球运动表现分析 / RTX 4060 Laptop 8GB / 以 AI 助手代写代码为主
+检索时间：2026-09（版本号与性能数字均来自下方来源链接，未核实的一律标注"未核实"）</p>
+</blockquote>
+<h2 id="一句话结论">一句话结论</h2>
+<p>羽毛球分析请从 <strong>MediaPipe Pose（Tasks API）</strong> 入门跑通管线，把 <strong>Ultralytics YOLO-pose（<code>yolo11n-pose.pt</code> / <code>yolo26n-pose.pt</code>）</strong> 作为正式主力（它一个模型同时给出 2-4 人的检测框和 COCO-17 骨架，还能叠加跟踪 ID），<strong>RTMPose/MMPose 留到精度不够时再上</strong>；3D 现在只值得"看懂概念"，不值得投入主力时间。</p>
+<h2 id="核心概念">核心概念</h2>
+<h3 id="1-六种主流-2D-方案的定位真实库名许可">1. 六种主流 2D 方案的定位（真实库名/许可）</h3>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>关键点</th>
+<th>安装难度</th>
+<th>依赖地狱</th>
+<th>许可证</th>
+<th>多人</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker">MediaPipe Pose Landmarker</a>（BlazePose）</td>
+<td>33 点 + 世界坐标</td>
+<td><code>pip install mediapipe</code>（PyPI 当前 1.0.1）</td>
+<td>低</td>
+<td>Apache-2.0</td>
+<td>❌ 单主体</td>
+</tr>
+<tr>
+<td><a href="https://docs.ultralytics.com/tasks/pose/">Ultralytics YOLO-pose</a></td>
+<td>COCO 17</td>
+<td><code>pip install ultralytics</code>（PyPI 8.4.153）</td>
+<td>低（自带 PyTorch）</td>
+<td><strong>AGPL-3.0</strong></td>
+<td>✅ 自顶向下内置</td>
+</tr>
+<tr>
+<td><a href="https://github.com/open-mmlab/mmpose">RTMPose / MMPose</a></td>
+<td>COCO 17 / 26 / 133</td>
+<td>需 mmengine+mmcv+mmdet 版本对齐</td>
+<td><strong>高</strong></td>
+<td>Apache-2.0</td>
+<td>✅（top-down 管线）</td>
+</tr>
+<tr>
+<td><a href="https://github.com/CMU-Perceptual-Computing-Lab/openpose">OpenPose</a></td>
+<td>BODY_25 / COCO-18</td>
+<td>需自行编译 C++/CMake/CUDA</td>
+<td>很高</td>
+<td>代码可商用但<strong>模型有额外限制</strong></td>
+<td>✅ 原生</td>
+</tr>
+<tr>
+<td><a href="https://www.kaggle.com/models/google/movenet">MoveNet</a>（Lightning/Thunder）</td>
+<td>COCO 17</td>
+<td>TensorFlow Hub / LiteRT 加载</td>
+<td>中（TF 版本敏感）</td>
+<td>Apache-2.0</td>
+<td>❌ 单主体</td>
+</tr>
+<tr>
+<td><a href="https://github.com/ViTAE-Transformer/ViTPose">ViTPose</a></td>
+<td>COCO 17</td>
+<td>要装 mmcv 1.3.9 + PyTorch 1.9 时代环境</td>
+<td>极高</td>
+<td>Apache-2.0</td>
+<td>依赖检测器</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>结论先行：许可最省心的是 MediaPipe / RTMPose / MoveNet；YOLO-pose 只要你不闭源商用就没问题（学术、个人分析随便用），一旦做产品必须换 Enterprise 许可或换模型。</p>
+</blockquote>
+<h3 id="2-精度与速度的真实数字">2. 精度与速度的真实数字</h3>
+<ul>
+<li>YOLO 官方 pose 表（COCO keypoints val，640 输入）：<code>yolo26n-pose</code> <strong>57.2 mAP50-95 / 2.9M 参数 / 7.6 GFLOPs</strong>，<code>yolo26s-pose</code> 63.0，<code>yolo26m-pose</code> 68.8，<code>yolo26x-pose</code> 71.6。n/s 两档在你的 4060 上跑实时毫无压力。</li>
+<li>RTMPose（COCO AP）：<code>rtmpose-t</code> 68.5、<code>rtmpose-s</code> 72.2、<code>rtmpose-m</code> <strong>75.8</strong>、<code>rtmpose-l</code> 76.5、<code>rtmpose-l-384</code> 78.3。</li>
+<li>结论：<strong>同为"实时档"时，RTMPose-m 的精度明显高于 YOLO-pose-n/s，但仍低于 YOLO26m-pose</strong>；YOLO 的优势是"检测+姿态+跟踪"一站式，RTMPose 的优势是同精度下参数更小、更省显存。</li>
+<li>ViTPose-L（top-down）在 COCO val 达 78.3 AP，ViTPose-G 在 COCO test-dev 达 81.1 AP —— 这是精度天花板，但推理慢、环境老，<strong>不是 8GB 笔记本该碰的东西</strong>。</li>
+</ul>
+<h3 id="3-骨架定义差异最容易踩的坑">3. 骨架定义差异（最容易踩的坑）</h3>
+<p><strong>COCO 17 点（索引顺序，YOLO/RTMPose/MoveNet 通用）</strong>：</p>
+<div class="codehilite"><pre><span></span><code>0 nose          1 left_eye       2 right_eye      3 left_ear       4 right_ear
+5 left_shoulder 6 right_shoulder 7 left_elbow     8 right_elbow
+9 left_wrist   10 right_wrist   11 left_hip      12 right_hip
+13 left_knee   14 right_knee    15 left_ankle    16 right_ankle
+</code></pre></div>
+
+<p>对比其他体系：</p>
+<ul>
+<li><strong>MediaPipe BlazePose 33 点</strong>：在 COCO 17 的基础上增加了 8 个手部点（<code>pinky</code> / <code>index</code> / <code>thumb</code>）和额外脸部点（<code>mouth_left</code> / <code>mouth_right</code>），并额外输出 <code>pose_world_landmarks</code>（以髋部中心为原点的米制 3D 坐标）。</li>
+<li><strong>OpenPose BODY_25</strong>：索引 0 nose、1 neck、2-7 肩肘腕（右前左后）、8 mid_hip、9-14 髋膝踝、15-18 眼耳、19-24 脚部（含 heel/big_toe/small_toe）—— <strong>多了颈部和脚部细节</strong>，这是它当年在体育分析里很受欢迎的原因。</li>
+<li><strong>OpenPose COCO-18</strong>：在 COCO 17 之外多加一个 <code>neck</code>（索引 1），整体索引后移。</li>
+<li><strong>RTMPose/MMPose</strong> 支持多种：COCO 17、COCO-WholeBody 133（body+hand+face）、26 点（coco + 脚部）、Animal 17（AP-10K）。</li>
+<li><strong>MotionBERT 要 H36M-17 格式</strong>，和 COCO-17 的排列完全不同，必须先做索引映射再喂进去。</li>
+</ul>
+<p>⚠️ <strong>羽毛球场景要注意</strong>：COCO 17 <strong>完全没有脚部点</strong>，只有 ankle。如果你要做"步伐/落地位置/启动脚步"分析，COCO 17 不够用，需要选 BODY_25 或 RTMPose 的 26 点模型（coco+foot）。</p>
+<h3 id="4-top-down-vs-bottom-up-范式">4. top-down vs bottom-up 范式</h3>
+<ul>
+<li><strong>Top-down（自顶向下）</strong>：先用检测器找出每个人的框 → 每个框单独裁出来跑单人姿态。优点：精度高、几乎没有归属歧义；缺点：人数越多越慢（耗时 ∝ 人数）。<strong>YOLO-pose 和 RTMPose 官方管线都是这个范式</strong>（RTMPose 常配 RTMDet-nano 做人检测，默认每 5 帧检测一次）。</li>
+<li><strong>Bottom-up（自底向上）</strong>：一次前向出所有人的热力图/关键点，再用 PAF（部位亲和场）或贪心匹配把人拼起来。优点：耗时与人数几乎无关；缺点：人一挤在一起（羽毛球双打交叉换位）就容易拼错人、把手脚接错。<strong>OpenPose 是它的经典代表</strong>。</li>
+</ul>
+<p><strong>羽毛球场景选型（2-4 人、快速移动、运动模糊、互相遮挡）</strong>：</p>
+<ol>
+<li><strong>人数少 → top-down 的"随人数变慢"完全不是问题</strong>，4 个人也就是 4 次单人推理，反而拿到了高精度和"绝不串人"的保证。所以别犹豫：<strong>选 top-down</strong>。</li>
+<li>用 <strong>YOLO-pose + <code>model.track()</code></strong> 给每个人一个稳定的 track id，这样"1 号球员的骨架"在整段视频里是连续的，跨帧姿态曲线才不会被张冠李戴。</li>
+<li><strong>运动模糊</strong>没有银弹：能控制拍摄就提高快门（≥1/1000s）、缩短曝光；不能控制就靠后处理——对关键点做置信度过滤 + Savitzky-Golay 或 One-Euro 滤波平滑，别对原始抖动序列直接算角速度。</li>
+<li><strong>遮挡</strong>时用置信度阈值丢掉低分点，别把 score=0.1 的手腕当成真值去算击球角度；缺失帧做插值并打标记。</li>
+</ol>
+<h2 id="可执行的最短路径真实命令">可执行的最短路径（真实命令）</h2>
+<div class="codehilite"><pre data-lang="bash"><span></span><code><span class="c1"># 环境（Python 3.10/3.11/3.12 都在 mediapipe 支持范围内）</span>
+python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv
+.venv<span class="se">\S</span>cripts<span class="se">\a</span>ctivate<span class="w">            </span><span class="c1"># Windows</span>
+pip<span class="w"> </span>install<span class="w"> </span>ultralytics<span class="w"> </span>mediapipe<span class="w"> </span>opencv-python
+</code></pre></div>
+
+<p><strong>A. YOLO-pose 最小可运行（推荐先跑这个，一次拿到 2-4 人骨架 + id）</strong></p>
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ultralytics</span><span class="w"> </span><span class="kn">import</span> <span class="n">YOLO</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">YOLO</span><span class="p">(</span><span class="s2">"yolo11n-pose.pt"</span><span class="p">)</span>     <span class="c1"># 首次运行自动下载；也可换 yolo26n-pose.pt</span>
+<span class="n">results</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">track</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"badminton.mp4"</span><span class="p">,</span> <span class="n">persist</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">save</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>                       <span class="c1"># 逐帧</span>
+    <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">keypoints</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">continue</span>
+    <span class="n">xy</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">keypoints</span><span class="o">.</span><span class="n">xy</span>                 <span class="c1"># [人数, 17, 2] 像素坐标</span>
+    <span class="n">conf</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">keypoints</span><span class="o">.</span><span class="n">conf</span>             <span class="c1"># [人数, 17] 每点置信度</span>
+    <span class="n">ids</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">boxes</span><span class="o">.</span><span class="n">id</span>                    <span class="c1"># [人数] 跟踪 id，用来区分球员</span>
+    <span class="c1"># 例：取 1 号球员左肩 idx5 / 右肘 idx7 / 左腕 idx9 计算肘关节角</span>
+</code></pre></div>
+
+<p>关键点顺序见上文 COCO 17 表：<code>kpt[5]</code> = 左肩、<code>kpt[7]</code> = 左肘、<code>kpt[9]</code> = 左手腕。</p>
+<p><strong>B. MediaPipe 最小可运行（单主体，最快跑通视觉验证）</strong></p>
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">cv2</span><span class="o">,</span><span class="w"> </span><span class="nn">mediapipe</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mediapipe.tasks</span><span class="w"> </span><span class="kn">import</span> <span class="n">python</span> <span class="k">as</span> <span class="n">mp_python</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mediapipe.tasks.python</span><span class="w"> </span><span class="kn">import</span> <span class="n">vision</span>
+
+<span class="n">base</span> <span class="o">=</span> <span class="n">mp_python</span><span class="o">.</span><span class="n">BaseOptions</span><span class="p">(</span><span class="n">model_asset_path</span><span class="o">=</span><span class="s2">"pose_landmarker_full.task"</span><span class="p">)</span>
+<span class="n">opts</span> <span class="o">=</span> <span class="n">vision</span><span class="o">.</span><span class="n">PoseLandmarkerOptions</span><span class="p">(</span><span class="n">base_options</span><span class="o">=</span><span class="n">base</span><span class="p">,</span> <span class="n">running_mode</span><span class="o">=</span><span class="n">vision</span><span class="o">.</span><span class="n">RunningMode</span><span class="o">.</span><span class="n">VIDEO</span><span class="p">)</span>
+<span class="n">landmarker</span> <span class="o">=</span> <span class="n">vision</span><span class="o">.</span><span class="n">PoseLandmarker</span><span class="o">.</span><span class="n">create_from_options</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span>
+
+<span class="n">cap</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">VideoCapture</span><span class="p">(</span><span class="s2">"badminton.mp4"</span><span class="p">)</span>
+<span class="n">idx</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">while</span> <span class="n">cap</span><span class="o">.</span><span class="n">isOpened</span><span class="p">():</span>
+    <span class="n">ok</span><span class="p">,</span> <span class="n">frame</span> <span class="o">=</span> <span class="n">cap</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ok</span><span class="p">:</span>
+        <span class="k">break</span>
+    <span class="n">rgb</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2RGB</span><span class="p">)</span>
+    <span class="n">mp_img</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="n">image_format</span><span class="o">=</span><span class="n">mp</span><span class="o">.</span><span class="n">ImageFormat</span><span class="o">.</span><span class="n">SRGB</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">rgb</span><span class="p">)</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">landmarker</span><span class="o">.</span><span class="n">detect_for_video</span><span class="p">(</span><span class="n">mp_img</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">idx</span> <span class="o">*</span> <span class="mi">1000</span> <span class="o">/</span> <span class="n">cap</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cv2</span><span class="o">.</span><span class="n">CAP_PROP_FPS</span><span class="p">)))</span>
+    <span class="k">if</span> <span class="n">res</span><span class="o">.</span><span class="n">pose_landmarks</span><span class="p">:</span>
+        <span class="n">pts</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">pose_landmarks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>         <span class="c1"># 33 个归一化点，x/y ∈ [0,1]</span>
+        <span class="n">world</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">pose_world_landmarks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="c1"># 33 个米制 3D 点（髋部为原点）</span>
+    <span class="n">idx</span> <span class="o">+=</span> <span class="mi">1</span>
+<span class="n">cap</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+</code></pre></div>
+
+<p>注意 MediaPipe 的 <code>.task</code> 模型文件需按官方文档下载，<code>detect_for_video</code> 要求时间戳单调递增（毫秒）。</p>
+<p><strong>C. RTMPose（精度不够时的升级路径）</strong></p>
+<div class="codehilite"><pre data-lang="bash"><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>rtmlib<span class="w">          </span><span class="c1"># 免 mmcv 的封装，包名与 API 请在安装后核对</span>
+</code></pre></div>
+
+<p>RtmLib 支持纯 Python 推理（ONNXRuntime / OpenCV / OpenVINO 后端），不必配置 mmcv 全家桶；如果坚持走原版 MMPose，必须按 <code>mmpose / mmengine / mmcv / mmdet</code> 的版本对应表安装，这是新手劝退率最高的一步。</p>
+<p><strong>D. 8GB 显存的取舍</strong></p>
+<ul>
+<li><code>yolo11n-pose.pt</code> / <code>yolo26n-pose.pt</code>：显存占用极小，1080p 视频离线批处理完全没压力（大约几 MB 权重 + 推理激活）。</li>
+<li>想要更高精度：<code>yolo11m-pose</code> / <code>yolo26m-pose</code>（25.9M / 21.5M 参数）在 8GB 上也跑得动，但建议把 <code>imgsz</code> 保持在 640-960，别一上来就 1280。</li>
+<li>别同时把 ViTPose-L、SMPL 系、大 batch 加载器塞进显存；8192 MiB 的笔记本卡还要留给系统和浏览器。</li>
+</ul>
+<h2 id="选型建议针对-8GB-显存-羽毛球">选型建议（针对 8GB 显存 + 羽毛球）</h2>
+<ol>
+<li><strong>第一周</strong>：只学 MediaPipe Pose，把"视频 → 33 点 → 画骨架 → 存 CSV"跑通。它的价值是让你在几小时内看见结果、建立直觉。</li>
+<li><strong>第一到第二周</strong>：切到 <strong>YOLO-pose + track</strong>，这是你真正的生产管线。理由：多人、自带 id、安装只有 <code>pip install ultralytics</code>、COCO 17 的文档和可视化代码到处都是。</li>
+<li><strong>真正分析羽毛球时</strong>：如果发现手腕/脚踝精度不够（击球点、步伐分析），再引入 RTMPose-m 做单人 ROI 精修 —— 用 YOLO 出框，把框裁出来喂给 RTMPose，兼顾速度与精度。</li>
+<li><strong>不要现在碰的</strong>：OpenPose（编译地狱）、ViTPose（环境老旧）、自训练 pose 模型（你没有标注数据）。</li>
+<li><strong>选型速记</strong>：单人在场、要快、要省事 → MediaPipe；多人、要 id、要工程化 → YOLO-pose；要论文级精度、愿意折腾 → RTMPose/MMPose。</li>
+</ol>
+<h2 id="3D-姿态估计现在到什么程度值不值得学">3D 姿态估计：现在到什么程度，值不值得学</h2>
+<ul>
+<li><strong>MediaPipe BlazePose 3D</strong>：直接给你 33 个 <code>pose_world_landmarks</code>（米制，髋部原点）。<strong>这是"伪 3D"</strong>——单目估出来的相对深度，尺度靠人体先验猜，抖动明显、绝对位置不可信。零成本，适合做角度趋势的定性观察。</li>
+<li><strong>MotionBERT（ICCV 2023）</strong>：把 2D 序列"提升"到 3D 的 Transformer，官方 repo 提供 pretrained（162MB）和 MotionBERT-Lite（61MB）。H36M-SH 上 MPJPE：<strong>scratch 训练 39.2mm，fine-tune 后 37.2mm</strong>。输入是 <strong>H36M-17 格式、最多 243 帧</strong>，环境写死 Python 3.7 + PyTorch 1.9 + CUDA 11.6 —— 这是典型的"论文复现环境"，和你的新显卡驱动大概率要打一架。</li>
+<li><strong>SMPL 系（参数化人体网格）</strong>：输出的是形状+姿态参数和完整网格，是"动作捕捉级"的路线（常见组合是 RTMPose/RTMW + MotionBERT + SMPL）。生态在 MMPose 侧（<code>mhuman3d</code> 等），涉及模型许可、坐标对齐、渲染，学习曲线是 2D 的数倍。</li>
+</ul>
+<p><strong>判断：不值得现在学，但值得现在"知道"。</strong> 原因有三：（1）你的羽毛球指标（击球点高度、膝关节角度、躯干扭转）在 2D + 单应性变换后已经能算，且误差来源主要在拍摄和关键点置信度，不在缺失的第三维；（2）3D 提升模型的误差和抖动会直接污染你的"角度曲线"，你很难判断是运动员变了还是模型抖了；（3）等 2D 管线和指标体系稳定后，MotionBERT 只需要接在你的 2D 输出后面，是个<strong>可插拔的增量</strong>，不是必须重做的地基。</p>
+<h2 id="常见坑">常见坑</h2>
+<ol>
+<li><strong>关键点索引搞错</strong>：COCO-17 的 <code>5</code> 是左肩不是右肩；把 33 点的 MediaPipe 索引直接套到 COCO 17 的代码上，画出来的骨架会荒谬地连错。写代码时用常量表而不是魔法数字。</li>
+<li><strong>坐标空间混淆</strong>：MediaPipe 输出的是<strong>归一化坐标</strong>（乘视频宽高才是像素）；YOLO 的 <code>keypoints.xy</code> 已经是原图像素坐标；OpenPose 的 <code>x,y,c</code> 可以按 <code>--keypoint_scale</code> 变成多种尺度。绘图前先统一。</li>
+<li><strong><code>kpt_shape: [17, 3]</code> 里的第三个数是 visible 不是 z</strong>。别把可见性当成深度去算 3D。</li>
+<li><strong>左右不分</strong>：模型预测的 left/right 是"人体自身的左右"，当球员背对镜头时，画面里在左边的是他的右手。做左右手技术统计时必须以躯干朝向校正。</li>
+<li><strong>把检测框当姿态用</strong>：羽毛球扣杀时手臂高举、腿大幅伸展，人体框会剧烈变化；用框宽高当"身高"去归一化尺度会引入巨大误差，应该用肩宽或髋宽（肩 5-6 / 髋 11-12 的距离）做尺度基准。</li>
+<li><strong>YOLO 权重文件名写错</strong>：最新版 Ultralytics 默认文档已经切到 <code>yolo26*</code> 系列（如 <code>yolo26n-pose.pt</code>），老教程里的 <code>yolov8n-pose.pt</code>/<code>yolo11n-pose.pt</code> 仍然在 release 里存在（<code>v8.3.0</code> 资源列表可查），但<strong>不要混用配置和权重</strong>。首次运行会自动下载，需联网。</li>
+<li><strong>AGPL-3.0 许可风险</strong>：Ultralytics 是 AGPL-3.0，个人/学术分析没问题，一旦你要做 App 或提供网络服务，必须考虑开源义务或买 Enterprise 许可。</li>
+</ol>
+<h2 id="参考链接">参考链接</h2>
+<ul>
+<li>MediaPipe Pose Landmarker 官方文档：https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker</li>
+<li>MediaPipe PyPI（当前 1.0.1，Apache-2.0）：https://pypi.org/project/mediapipe/</li>
+<li>Ultralytics 官方 Pose 任务文档（COCO 17 名称与索引表、模型性能表）：https://docs.ultralytics.com/tasks/pose/</li>
+<li>Ultralytics PyPI（当前 8.4.153，AGPL-3.0）：https://pypi.org/project/ultralytics/</li>
+<li>Ultralytics 许可说明（AGPL-3.0 vs Enterprise）：https://docs.ultralytics.com/#yolo-licenses-how-is-ultralytics-yolo-licensed</li>
+<li>YOLO 权重资源仓库（<code>yolo11x-pose.pt</code> 等 <code>v8.3.0</code> 资源）：https://github.com/ultralytics/assets/releases/tag/v8.3.0</li>
+<li>RTMPose 模型库与精度/速度表：https://github.com/open-mmlab/mmpose/blob/main/projects/rtmpose/README.md</li>
+<li>MMPose 主仓库（PyTorch 1.8+，Apache-2.0）：https://github.com/open-mmlab/mmpose</li>
+<li>MMPose FAQ（版本兼容问题）：https://mmpose.readthedocs.io/en/latest/faq.html</li>
+<li>OpenPose 输出格式与 BODY_25 / COCO-18 定义：https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/doc/02_output.md</li>
+<li>OpenPose 主仓库（34449 stars，最近推送 2024-08）：https://github.com/CMU-Perceptual-Computing-Lab/openpose</li>
+<li>ViTPose 官方仓库（CVPR/NeurIPS 2022，COCO val 73.8-79.1 AP；ViTPose-G 81.1 AP @ test-dev）：https://github.com/ViTAE-Transformer/ViTPose</li>
+<li>MoveNet（Lightning / Thunder，17 关键点）：https://www.kaggle.com/models/google/movenet</li>
+<li>MotionBERT 官方仓库（ICCV 2023，H36M-SH 39.2mm / 37.2mm，162MB &amp; 61MB 权重）：https://github.com/Walter0807/MotionBERT</li>
+<li>COCO 数据集官网（关键点定义来源）：https://cocodataset.org/</li>
+</ul>
+<h2 id="给-AI-编程助手的提示词">给 AI 编程助手的提示词</h2>
+<blockquote>
+<p>我在用 Python 做<strong>羽毛球视频的多人姿态估计</strong>（画面里 2-4 人、快速移动、运动模糊、有遮挡），显卡是 RTX 4060 Laptop 8GB。请用 <strong>Ultralytics YOLO-pose</strong>（<code>yolo11n-pose.pt</code> 或当前版本的 <code>yolo26n-pose.pt</code>）配合 <code>model.track()</code> 写脚本，输出<strong>每帧每人的 COCO-17 关键点像素坐标、置信度、跟踪 id</strong>，并保存为 CSV；请显式写清楚哪些索引对应左肩(5)/右肘(7)/左腕(9)/右髋(11)/左膝(13)/左踝(15)，<strong>不要凭印象编造索引</strong>。
+关键点置信度低于阈值时留空<strong>不要插值填补</strong>，并单独输出一列标记该帧是否为"可疑帧"；不要为了让曲线好看而静默平滑。
+请先确认库名、模型权重文件名、API 参数在当前安装版本中真实存在（必要时先打印 <code>ultralytics.__version__</code>），不要使用不存在的模型名或参数。
+注意：Ultralytics 是 <strong>AGPL-3.0</strong>，请说明我的用途是否触发开源义务；另外不要建议我一开始就上 MMPose/mmcv 栈或 3D 提升模型，先用最小可运行版本验证画面里能不能稳定跟住这 2-4 个人。</p>
+</blockquote>
+<div class="pager">
+<a class="prev" href="research-02.html"><span class="lbl">上一篇</span><span class="ttl">调研 02 · 数据集与训练</span></a>
+<a class="next" href="research-04.html"><span class="lbl">下一篇</span><span class="ttl">调研 04 · 骨架时序</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

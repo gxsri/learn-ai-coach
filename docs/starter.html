@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>可运行代码骨架 · 羽毛球 AI 教练</title>
+<meta name="description" content="视频 → 骨架 → 击球事件 → 报告，含 26 项算法自检和合成数据生成器。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html" class="current">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">代码与资料</span></div>
+<h1 id="starter-可运行的代码骨架">starter · 可运行的代码骨架</h1>
+<blockquote>
+<p>从"一段视频"走到"一份带指标的报告"。每一步都能单独跑、单独验证。</p>
+</blockquote>
+<hr>
+<h2 id="先跑这两个不需要显卡不需要视频">先跑这两个（不需要显卡、不需要视频）</h2>
+<blockquote class="warn">
+<h3 id="先说一个必踩的坑不要用-Activateps1">⚠️ 先说一个必踩的坑：不要用 <code>Activate.ps1</code></h3>
+<p>Windows PowerShell <strong>默认禁止运行 <code>.ps1</code> 脚本</strong>，所以：</p>
+<p>```powershell
+..venv\Scripts\Activate.ps1</p>
+<h1 id="无法加载文件-因为在此系统上禁止运行脚本">→ 无法加载文件 ... 因为在此系统上禁止运行脚本</h1>
+<p>```</p>
+<p><strong>虚拟环境因此没有激活</strong>，这时敲 <code>python</code> 用的是<strong>系统 Python</strong>，
+包都装在 <code>.venv</code> 里 —— 于是你会看到
+<code>ModuleNotFoundError: No module named 'pandas'</code> 这种<strong>把人引向错误方向</strong>的报错。</p>
+<p><strong>正确做法：根本不激活，直接调用虚拟环境里的 python。</strong>
+本目录提供了一个快捷方式 <code>run.cmd</code>（<code>.cmd</code> 不受 PowerShell 执行策略限制）：</p>
+<p><code>powershell
+.\run.cmd                    # 环境诊断（不带参数）
+.\run.cmd selftest.py        # 等价于 .venv\Scripts\python.exe selftest.py
+.\run.cmd 01_check_env.py</code></p>
+<p>或者直接写全路径（效果一样，少一层封装）：</p>
+<p><code>powershell
+.\.venv\Scripts\python.exe selftest.py</code></p>
+<p><strong>想用常规的 activate 也行</strong>，加一句临时放开（只影响当前窗口，关掉即失效）：</p>
+<p><code>powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1</code></p>
+<p>怎么确认修好了：<code>python -c "import sys; print(sys.executable)"</code>
+输出的路径里<strong>必须带 <code>.venv</code></strong>。</p>
+</blockquote>
+<h3 id="三个自检">三个自检</h3>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="nb">cd </span><span class="n">D</span><span class="p">:\</span><span class="n">program</span><span class="p">\</span><span class="n">learn-ai-coach</span><span class="p">\</span><span class="n">starter</span>
+
+<span class="p">.\</span><span class="n">run</span><span class="p">.</span><span class="n">cmd</span> <span class="n">01_check_env</span><span class="p">.</span><span class="n">py</span>      <span class="c"># 环境自检：告诉你缺什么、怎么装</span>
+<span class="p">.\</span><span class="n">run</span><span class="p">.</span><span class="n">cmd</span> <span class="n">selftest</span><span class="p">.</span><span class="n">py</span>          <span class="c"># 算法自检：26 项，用合成数据验证核心算法</span>
+<span class="p">.\</span><span class="n">run</span><span class="p">.</span><span class="n">cmd</span> <span class="n">make_demo_session</span><span class="p">.</span><span class="n">py</span> <span class="c"># 生成合成数据，完整跑通 03/04（不需要视频和显卡）</span>
+</code></pre></div>
+
+<p><strong>这三步现在就能跑。</strong> 跑通了，你就已经验证了：算法是对的、流水线是通的。
+之后遇到问题，就能确定是<strong>数据</strong>的问题，不是<strong>代码</strong>的问题。</p>
+<hr>
+<h2 id="装环境">装环境</h2>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="c"># 一键脚本（推荐）</span>
+<span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">Bypass</span> <span class="o">-File</span> <span class="p">.\</span><span class="n">setup</span><span class="p">.</span><span class="n">ps1</span>
+</code></pre></div>
+
+<p>或者手动（<strong>顺序不能反</strong>）：</p>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="n">python</span> <span class="n">-m</span> <span class="n">venv</span> <span class="p">.</span><span class="n">venv</span>
+<span class="p">.\.</span><span class="n">venv</span><span class="p">\</span><span class="n">Scripts</span><span class="p">\</span><span class="n">Activate</span><span class="p">.</span><span class="n">ps1</span>
+
+<span class="c"># 先装 CUDA 版 PyTorch —— 反过来的话 ultralytics 会给你装 CPU 版</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">torch</span> <span class="n">torchvision</span> <span class="p">-</span><span class="n">-index-url</span> <span class="n">https</span><span class="p">://</span><span class="n">download</span><span class="p">.</span><span class="n">pytorch</span><span class="p">.</span><span class="n">org</span><span class="p">/</span><span class="n">whl</span><span class="p">/</span><span class="n">cu128</span>
+
+<span class="c"># 再装其余的</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">ultralytics</span> <span class="n">opencv-python</span> <span class="n">pandas</span> <span class="n">matplotlib</span> <span class="n">numpy</span>
+</code></pre></div>
+
+<p>还需要 <strong>ffmpeg</strong>（抽帧用）：</p>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="n">winget</span> <span class="n">install</span> <span class="p">-</span><span class="n">-id</span> <span class="n">Gyan</span><span class="p">.</span><span class="n">FFmpeg</span> <span class="n">-e</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>卡住了？</strong> 先看 <a href="p2-05.html"><code>../part2-YOLO与骨架/05-常见坑与调试.md</code></a>，那是专门写给你的排错手册。</p>
+</blockquote>
+<hr>
+<h2 id="完整流水线">完整流水线</h2>
+<blockquote>
+<p>✅ <strong>本流水线已在一台真实机器上端到端跑通</strong>
+（RTX 4060 Laptop / torch 2.11.0+cu128 / ultralytics 8.4.153 / pandas 3.0.5）
+真实测试：341 帧 1080p 视频，27.3 秒处理完，11-12 帧/秒，产出 1014 行骨架。</p>
+</blockquote>
+<div class="codehilite"><pre><span></span><code>┌──────────────────────────────────────────────────────────────┐
+│ ① 视频 → 骨架坐标                                            │
+│    .\run.cmd 02_extract_pose.py --video 视频.mp4 --session s1 │
+│    产出 01_pose.csv + meta.json                              │
+│    ⚠️ 需要显卡 + 联网（首次会自动下载权重）                    │
+│    ⚠️ 跑完一定要看"跟踪稳定性体检"的输出                       │
+└──────────────────────────────────────────────────────────────┘
+                            ↓
+┌──────────────────────────────────────────────────────────────┐
+│ ② 骨架 → 击球事件 + 指标                                     │
+│    .\run.cmd 03_events_and_metrics.py --session s1            │
+│    产出 02_events.csv + 03_metrics.json                      │
+│    ⚠️ 不需要显卡。这一步最容易被做错                          │
+└──────────────────────────────────────────────────────────────┘
+                            ↓
+┌──────────────────────────────────────────────────────────────┐
+│ ③ 生成报告                                                   │
+│    .\run.cmd 04_report.py --session s1                        │
+│    产出 curves.png + report.html                             │
+└──────────────────────────────────────────────────────────────┘
+</code></pre></div>
+
+<blockquote>
+<p>下面的命令一律用 <code>.\run.cmd xxx.py</code>。
+如果你已经正确激活了虚拟环境（<code>python</code> 指向 <code>.venv</code>），把 <code>.\run.cmd</code> 换成 <code>python</code> 也一样。</p>
+</blockquote>
+<h3 id="手边没有羽毛球视频用自带的测试视频">手边没有羽毛球视频？用自带的测试视频</h3>
+<p><code>testdata/people-walking.mp4</code> 是一段真实的行人视频（25fps / 1920×1080 / 341 帧），
+来自 Roboflow 的公开示例素材。<strong>它不是羽毛球视频</strong>，所以"击球"结果没有意义 ——
+但它能验证整条流水线（读视频 → 推理 → 跟踪 → 落盘 → 报告）是通的。</p>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="p">.\</span><span class="n">run</span><span class="p">.</span><span class="n">cmd</span> <span class="n">02_extract_pose</span><span class="p">.</span><span class="n">py</span> <span class="p">-</span><span class="n">-video</span> <span class="n">testdata</span><span class="p">/</span><span class="n">people-walking</span><span class="p">.</span><span class="n">mp4</span> <span class="p">-</span><span class="n">-session</span> <span class="n">walk</span>
+<span class="p">.\</span><span class="n">run</span><span class="p">.</span><span class="n">cmd</span> <span class="n">03_events_and_metrics</span><span class="p">.</span><span class="n">py</span> <span class="p">-</span><span class="n">-session</span> <span class="n">walk</span>
+<span class="p">.\</span><span class="n">run</span><span class="p">.</span><span class="n">cmd</span> <span class="n">04_report</span><span class="p">.</span><span class="n">py</span> <span class="p">-</span><span class="n">-session</span> <span class="n">walk</span>
+</code></pre></div>
+
+<hr>
+<h2 id="文件清单">文件清单</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>作用</th>
+<th>需要什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run.cmd</code></td>
+<td><strong>快捷启动器</strong>：直接用 <code>.venv</code> 的 python 跑脚本，绕开 PowerShell 执行策略</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>env_hint.py</code></td>
+<td>用错解释器时给出可自我诊断的提示（<code>.\run.cmd</code> 不带参数即运行它）</td>
+<td>无</td>
+</tr>
+<tr>
+<td><code>common.py</code></td>
+<td>公共常量 + 核心算法（角度、SG 平滑、速度、击球检测、标定）</td>
+<td>numpy</td>
+</tr>
+<tr>
+<td><code>selftest.py</code></td>
+<td><strong>26 项算法自检</strong>，用合成数据验证算法正确性</td>
+<td>numpy</td>
+</tr>
+<tr>
+<td><code>01_check_env.py</code></td>
+<td>环境体检：缺什么、怎么装</td>
+<td>无（标准库）</td>
+</tr>
+<tr>
+<td><code>02_extract_pose.py</code></td>
+<td>视频 → <code>01_pose.csv</code></td>
+<td>ultralytics + torch + cv2</td>
+</tr>
+<tr>
+<td><code>03_events_and_metrics.py</code></td>
+<td>CSV → 击球事件 + 指标</td>
+<td>pandas + numpy</td>
+</tr>
+<tr>
+<td><code>04_report.py</code></td>
+<td>→ <code>curves.png</code> + <code>report.html</code></td>
+<td>pandas + matplotlib</td>
+</tr>
+<tr>
+<td><code>make_demo_session.py</code></td>
+<td>生成合成数据，离线验证流水线</td>
+<td>numpy</td>
+</tr>
+<tr>
+<td><code>setup.ps1</code></td>
+<td>一键装环境（UTF-8 <strong>带 BOM</strong>，否则 PowerShell 5.1 会把中文读成乱码）</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<h3 id="两个-Windows-编码坑改这些文件之前先看">两个 Windows 编码坑（改这些文件之前先看）</h3>
+<p><strong>① <code>.cmd</code> / <code>.bat</code> 必须是纯 ASCII。</strong>
+<code>cmd.exe</code> 用<strong>系统 OEM 代码页（中文 Windows 上是 GBK）</strong>读取批处理文件，<strong>不是 UTF-8</strong>。
+在 <code>.cmd</code> 里写中文注释，会被解码成乱码字节，<code>cmd</code> 会<strong>把乱码当命令去执行</strong>，
+表现为刷屏的 <code>'xxx' is not recognized as an internal or external command</code> 死循环。
+<code>run.cmd</code> 因此<strong>刻意全用英文注释</strong>。</p>
+<p><strong>② <code>.ps1</code> 必须带 UTF-8 BOM。</strong>
+本机是 <strong>Windows PowerShell 5.1</strong>，它读取<strong>无 BOM</strong> 的 <code>.ps1</code> 时按 ANSI(cp936) 解析，
+中文全部乱码。带 BOM 才会按 UTF-8 解析。</p>
+<p>⚠️ <strong>注意</strong>：用编辑器（或 AI 助手）改完 <code>setup.ps1</code> 之后，<strong>BOM 可能会被去掉</strong>。
+检查并加回：</p>
+<p>```powershell
+$p = '.\setup.ps1'
+$b = <a href=":WriteAllText" title="$p, $t, (New-Object System.Text.UTF8Encoding $true)">System.IO.File</a>::ReadAllBytes($p)
+if (-not ($b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF)) {
+  $t = <a href=":WriteAllText" title="$p, $t, (New-Object System.Text.UTF8Encoding $true)">System.IO.File</a>::ReadAllText($p, (New-Object System.Text.UTF8Encoding $false))</p>
+<p>'BOM 已加回'
+}
+```</p>
+<p>好消息是：BOM 丢了只会让<strong>提示文字乱码</strong>，脚本逻辑本身（全是 ASCII）照常工作。</p>
+</blockquote>
+<hr>
+<h2 id="每个脚本的关键参数">每个脚本的关键参数</h2>
+<h3 id="02_extract_posepy"><code>02_extract_pose.py</code></h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>默认</th>
+<th>什么时候改</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--session</code></td>
+<td>必填</td>
+<td>每次分析换一个名字。<strong>这是数据划分的关键字段，不要重复用</strong></td>
+</tr>
+<tr>
+<td><code>--model</code></td>
+<td><code>yolo26n-pose.pt</code></td>
+<td>资料找不到就换 <code>yolo11n-pose.pt</code></td>
+</tr>
+<tr>
+<td><code>--conf</code></td>
+<td><code>0.3</code></td>
+<td>检测阈值。漏检多 → 降到 <code>0.15</code>；误检多 → 升到 <code>0.5</code></td>
+</tr>
+<tr>
+<td><code>--imgsz</code></td>
+<td><code>640</code></td>
+<td><strong>人小就提到 1280</strong> —— 实测能把"无 id 的框"从 31.9% 降到 0%</td>
+</tr>
+<tr>
+<td><code>--overlay</code></td>
+<td>关</td>
+<td><strong>强烈建议开</strong>：输出 <code>overlay.mp4</code>，用肉眼看跟踪准不准</td>
+</tr>
+</tbody>
+</table>
+<h3 id="--overlay-是你最该用的一个开关">⭐ <code>--overlay</code> 是你最该用的一个开关</h3>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="p">.\</span><span class="n">run</span><span class="p">.</span><span class="n">cmd</span> <span class="n">02_extract_pose</span><span class="p">.</span><span class="n">py</span> <span class="p">-</span><span class="n">-video</span> <span class="n">你的视频</span><span class="p">.</span><span class="n">mp4</span> <span class="p">-</span><span class="n">-session</span> <span class="n">s1</span> <span class="p">-</span><span class="n">-overlay</span>
+</code></pre></div>
+
+<p>它会输出一段 <code>overlay.mp4</code>，画面上直接标出：</p>
+<table>
+<thead>
+<tr>
+<th>画的东西</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>绿色连线</td>
+<td>骨架，两端关键点都可信</td>
+</tr>
+<tr>
+<td>橙色实心点</td>
+<td>关键点置信度 ≥ 0.5（03 步骤会采用）</td>
+</tr>
+<tr>
+<td><strong>红色叉</strong></td>
+<td>置信度 &lt; 0.5（03 步骤会<strong>丢掉</strong>这些点，所以你看到红叉就是那个部位不可信）</td>
+</tr>
+<tr>
+<td><code>id=8</code> 黄字</td>
+<td>跟踪 id</td>
+</tr>
+<tr>
+<td><code>id=?</code></td>
+<td><strong>跟踪器没给这个人分配 id</strong> —— 这种行 03 默认会跳过</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么必须看</strong>：<code>01_pose.csv</code> 里全是数字，
+<code>report.html</code> 里全是统计量 —— <strong>两者都看不出"骨架到底跟没跟住人"</strong>。
+只有把骨架画回视频上，你才能一眼看出：
+串号了没有、遮挡时断了没有、红叉是不是出现在关键部位。</p>
+<blockquote>
+<p><strong>这一步是"数据质量验收"，不是可选项。</strong> 骨架跟不住，后面所有指标都是垃圾。</p>
+</blockquote>
+<h3 id="03_events_and_metricspy"><code>03_events_and_metrics.py</code></h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>默认</th>
+<th>什么时候改</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--hand</code></td>
+<td><code>right</code></td>
+<td><strong>持拍手搞反了是最常见的错</strong>。结果不对先试 <code>--hand left</code></td>
+</tr>
+<tr>
+<td><code>--min-speed</code></td>
+<td><code>3.0</code></td>
+<td>击球检出太少 → 降到 <code>2.0</code>；假击球太多 → 升到 <code>5.0</code></td>
+</tr>
+<tr>
+<td><code>--min-gap</code></td>
+<td><code>10</code></td>
+<td>一次挥拍被拆成好几次 → 调大</td>
+</tr>
+<tr>
+<td><code>--fps</code></td>
+<td>从 meta 读</td>
+<td>meta 里没有就<strong>必须手工传</strong>，否则所有速度指标都偏</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="跑完之后怎么判断结果对不对">跑完之后，怎么判断结果对不对</h2>
+<h3 id="有合成数据时推荐先做这个">有合成数据时（推荐先做这个）</h3>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="n">python</span> <span class="n">make_demo_session</span><span class="p">.</span><span class="n">py</span>
+<span class="n">python</span> <span class="n">03_events_and_metrics</span><span class="p">.</span><span class="n">py</span> <span class="p">-</span><span class="n">-session</span> <span class="n">demo</span>
+</code></pre></div>
+
+<p>把 <code>03_metrics.json</code> 里的 <code>hit_frames</code> 和 <code>meta.json</code> 里的
+<code>ground_truth_hit_frames</code> 对一下 —— <strong>误差在 ±5 帧内就算正常</strong>。</p>
+<blockquote>
+<p>实测：2 个球员各 3 次击球，检出 <strong>6/6</strong>，最大误差 <strong>1 帧</strong>。</p>
+</blockquote>
+<h3 id="用真实视频时">用真实视频时</h3>
+<table>
+<thead>
+<tr>
+<th>检查什么</th>
+<th>怎么查</th>
+<th>正常的样子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>跟踪稳不稳</strong></td>
+<td><code>02</code> 跑完的体检输出</td>
+<td>2-4 个 <code>track_id</code>，每个覆盖几千帧</td>
+</tr>
+<tr>
+<td><strong>骨架跟不跟得住</strong></td>
+<td><code>02</code> 加 <code>save=True</code> 看叠加视频</td>
+<td>火柴人贴着人不乱跳</td>
+</tr>
+<tr>
+<td><strong>击球次数合不合理</strong></td>
+<td>数一下视频里大概打了几拍</td>
+<td>检出数量量级一致（±20%）</td>
+</tr>
+<tr>
+<td><strong>速度曲线有没有峰</strong></td>
+<td>看 <code>curves.png</code> 第一张图</td>
+<td>明显的峰谷，不是一条平线</td>
+</tr>
+<tr>
+<td><strong>角度值合不合理</strong></td>
+<td>看 <code>report.html</code> 的明细表</td>
+<td>肘角大致在 90°-180° 之间</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="三条必须知道的限制">⚠️ 三条必须知道的限制</h2>
+<ol>
+<li>
+<p><strong>所有角度都是「画面投影角」，不是生物力学真值。</strong>
+   单目 2D 有系统性低估。报告里已经自动写入了这条声明。
+   只做<strong>同一机位、同一球员</strong>的纵向对比。</p>
+</li>
+<li>
+<p><strong>速度的单位是「肩宽/秒」，不是「米/秒」。</strong>
+   要换成米，必须先做场地标定（<code>common.py</code> 里有 <code>homography_from_points</code>）。</p>
+</li>
+<li>
+<p><strong>不要把报告用于医疗或训练决策。</strong> 它是一个分析辅助工具。</p>
+</li>
+</ol>
+<hr>
+<h2 id="下一步">下一步</h2>
+<ul>
+<li>想理解每一步的原理 → <code>../part2-YOLO与骨架/</code></li>
+<li>卡住了 → <a href="p2-05.html"><code>../part2-YOLO与骨架/05-常见坑与调试.md</code></a></li>
+<li>想学怎么用多 agent 加速这些工作 → <code>../part1-多agent协作/</code></li>
+</ul>
+<div class="pager">
+<a class="prev" href="p2-05.html"><span class="lbl">上一篇</span><span class="ttl">常见坑与调试</span></a>
+<a class="next" href="preset-coach.html"><span class="lbl">下一篇</span><span class="ttl">示例 agent 预设</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

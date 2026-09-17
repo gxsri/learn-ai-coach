@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>实战复盘：43 条错误 · 羽毛球 AI 教练</title>
+<meta name="description" content="7 个 agent 并行调研 + 交叉审校的真实数据，以及多 agent 的能力边界。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html" class="current"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">路线 A · 多 agent 协作</span></div>
+<h1 id="05-实战复盘这套文档是怎么被多-agent-生产出来的">05 · 实战复盘：这套文档是怎么被多 agent 生产出来的</h1>
+<blockquote>
+<p>这一篇不是理论。它记录的是<strong>就在你眼前真实发生过的一次多 agent 运行</strong>——
+你在这次会话里看到的那次 <code>workflow</code> 调用。</p>
+<p>学会看复盘，比学会写脚本更重要。</p>
+</blockquote>
+<hr>
+<h2 id="一任务是什么">一、任务是什么</h2>
+<p><strong>需求</strong>：一个编程基础薄弱、主要靠 AI 助手写代码的人，想做羽毛球运动表现分析，
+要从零学 YOLO 和骨架分析。需要先把整个技术版图调研清楚。</p>
+<p><strong>问题</strong>：这个领域涉及 5-6 个互不相干的子领域（目标检测、姿态估计、时序建模、
+羽毛球专项研究、工程部署），资料量大，而且<strong>新手最容易学到过时的东西</strong>
+（网上大量教程还在讲 YOLOv5、YOLOv8，而官方已经走到很后面了）。</p>
+<p><strong>决策</strong>：用模式 1（扇出调研）+ 模式 3（生产者-验证者）。</p>
+<hr>
+<h2 id="二我实际做了什么">二、我实际做了什么</h2>
+<h3 id="一次调用">一次调用</h3>
+<p>我给了 <code>workflow</code> 工具两样东西：</p>
+<p><strong><code>meta</code></strong>（身份 + 阶段声明）：</p>
+<div class="codehilite"><pre data-lang="json"><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"badminton-ai-research"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"六路并行调研 YOLO、姿态估计、骨架时序分析与羽毛球专项，再由一个审校 agent 交叉核验"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"phases"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"调研：六路并行"</span><span class="p">,</span><span class="w"> </span><span class="nt">"detail"</span><span class="p">:</span><span class="w"> </span><span class="s2">"6 个 agent 各自负责一个专题，联网检索后分别落盘"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"交叉审校"</span><span class="p">,</span><span class="w"> </span><span class="nt">"detail"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1 个 agent 读完全部笔记，核对事实并找矛盾与缺口"</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong><code>script</code></strong>（脚本正文），骨架就是 <code>examples/04-research-pipeline.js</code> 那个形状：</p>
+<div class="codehilite"><pre data-lang="js"><span></span><code><span class="nx">phase</span><span class="p">(</span><span class="s1">'调研：六路并行'</span><span class="p">)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">notes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">parallel</span><span class="p">(</span>
+<span class="w">  </span><span class="nx">topics</span><span class="p">.</span><span class="nx">map</span><span class="p">((</span><span class="nx">t</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="nx">promptFor</span><span class="p">(</span><span class="nx">t</span><span class="p">),</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="nx">t</span><span class="p">.</span><span class="nx">id</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s1">' · '</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">t</span><span class="p">.</span><span class="nx">title</span><span class="p">,</span><span class="w"> </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'调研：六路并行'</span><span class="w"> </span><span class="p">})),</span>
+<span class="p">)</span>
+<span class="nx">phase</span><span class="p">(</span><span class="s1">'交叉审校'</span><span class="p">)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">review</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">agent</span><span class="p">(</span><span class="nx">reviewPrompt</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">'审校 · 6 份笔记交叉核验'</span><span class="p">,</span><span class="w"> </span><span class="nx">phase</span><span class="o">:</span><span class="w"> </span><span class="s1">'交叉审校'</span><span class="w"> </span><span class="p">})</span>
+<span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">完成数</span><span class="o">:</span><span class="w"> </span><span class="nx">notes</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="nb">Boolean</span><span class="p">).</span><span class="nx">length</span><span class="p">,</span><span class="w"> </span><span class="nx">总任务数</span><span class="o">:</span><span class="w"> </span><span class="nx">topics</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span><span class="w"> </span><span class="nx">审校</span><span class="o">:</span><span class="w"> </span><span class="nx">review</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+
+<p><strong>就这些。</strong> 脚本本身没有任何"智能"——它只是把 6 个提示词发出去、等结果、再发第 7 个。</p>
+<h3 id="提示词里的三个关键设计">提示词里的三个关键设计</h3>
+<p><strong>设计 1：每个 agent 必须自己落盘，只回传短摘要</strong></p>
+<div class="codehilite"><pre data-lang="text"><span></span><code>请把最终笔记写入这个文件（用 write 工具创建）：
+D:/program/learn-ai-coach/research/01-YOLO技术全景与硬件选型.md
+
+写完后，只返回不超过 8 行的中文摘要。
+</code></pre></div>
+
+<p>结果：6 份笔记共 <strong>约 74 KB</strong>（8528 + 12619 + 16252 + 14056 + 11431 + 16544 字节）落到了磁盘上，
+而回到主 agent 上下文里的，只有 6 段八行摘要。</p>
+<blockquote>
+<p><strong>这是多 agent 最实用的一招。</strong> 如果让 6 个 agent 把全文回传，主 agent 的上下文当场就满了，
+后面的审校、汇总、写教程全都没法做。</p>
+</blockquote>
+<p><strong>设计 2：给每个 agent 划互斥边界</strong></p>
+<div class="codehilite"><pre data-lang="text"><span></span><code>你的专题：YOLO 技术全景与硬件选型
+必须覆盖：……
+</code></pre></div>
+
+<p>6 个专题刻意不重叠。<strong>这条不做，6 个 agent 会各写一遍 YOLO 简介。</strong></p>
+<p><strong>设计 3：强制统一格式</strong></p>
+<p>同一段 <code>COMMON</code> 要求被拼进 6 个提示词：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code>全中文，Markdown。结构：一句话结论 / 核心概念 / 可执行的最短路径（带真实命令）
+/ 选型建议 / 常见坑 / 参考链接。
+每篇最后加一节「给 AI 编程助手的提示词」。
+</code></pre></div>
+
+<blockquote>
+<p>最后那一节是<strong>副产品设计</strong>：既然阅读者主要靠 AI 助手写代码，就让每篇笔记顺便产出
+"以后该怎么向助手提这个需求"。你会在 6 份笔记末尾都看到它。</p>
+</blockquote>
+<hr>
+<h2 id="三结果数字">三、结果：数字</h2>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>实际值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>参与的 agent 数</td>
+<td><strong>7</strong>（6 个调研 + 1 个审校）</td>
+</tr>
+<tr>
+<td>阶段数</td>
+<td>2</td>
+</tr>
+<tr>
+<td>产出文件</td>
+<td><strong>7</strong>（6 份笔记 + 1 份审校报告）</td>
+</tr>
+<tr>
+<td>产出总量</td>
+<td><strong>约 101 KB</strong> / 721 行</td>
+</tr>
+<tr>
+<td>回到主 agent 上下文的</td>
+<td>约 30 行摘要</td>
+</tr>
+<tr>
+<td>审校发现的问题</td>
+<td><strong>43 条编号问题 + 8 处跨文件矛盾 + 8 个结构性缺口</strong></td>
+</tr>
+<tr>
+<td>审校自己标注"待复核"的</td>
+<td>5 处</td>
+</tr>
+</tbody>
+</table>
+<p><strong>这就是扇出 + 验证者模式的实际收益：</strong>
+用一次工具调用换到 100 KB 的结构化资料，并且<strong>知道这 100 KB 里哪些地方不可信</strong>。</p>
+<hr>
+<h2 id="四审校环节到底抓到了什么最重要的一节">四、审校环节到底抓到了什么（最重要的一节）</h2>
+<p>审校 agent 的报告有 93 行、分 5 节。挑三个最有代表性的：</p>
+<h3 id="案例-A版本选型6-个-agent-各说各话">案例 A：版本选型，6 个 agent 各说各话</h3>
+<table>
+<thead>
+<tr>
+<th>笔记</th>
+<th>它推荐什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>01</code></td>
+<td>"从 <code>yolo11n-pose.pt</code> 起步""YOLO26 更强但资料少"</td>
+</tr>
+<tr>
+<td><code>03</code></td>
+<td>两个并列，没给结论</td>
+</tr>
+<tr>
+<td><code>05</code></td>
+<td>直接推 <code>yolo26n-pose</code> / <code>yolo26s-pose</code></td>
+</tr>
+<tr>
+<td><code>02</code></td>
+<td>主线写的是 <code>yolo26n.pt</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>问题是</strong>：<code>01</code> 给出的"资料少所以别用 YOLO26"这条理由，在官方文档已经更新之后<strong>不成立了</strong>。
+审校 agent 联网核对后给出仲裁：</p>
+<blockquote>
+<p>新项目直接用 <code>yolo26n-pose.pt</code>（同为 2.9M 参数，COCO 关键点 mAP50-95 <strong>57.2</strong>，
+而 <code>yolo11n-pose</code> 是 <strong>50.0</strong>）；<code>yolo11n-pose.pt</code> 保留<strong>仅作为回退</strong>。</p>
+</blockquote>
+<p><strong>这个结论是任何一个单独的调研 agent 都给不出来的</strong>——它们各自看到的只是自己那块拼图。</p>
+<blockquote>
+<p>📌 <strong>教训 1：扇出一定会制造口径不一致。</strong>
+如果你只做扇出、不做收口，你拿到的不是"6 份资料"，而是"6 个互相打架的答案"，
+而你作为新手<strong>没有能力判断谁对</strong>。收口（仲裁）环节不是可选项，是必需品。</p>
+</blockquote>
+<h3 id="案例-B整套资料里最严重的一致性缺陷">案例 B：整套资料里最严重的一致性缺陷</h3>
+<p><code>01</code> 和 <code>06</code> 把"从关键点算关节角度"当成核心卖点：</p>
+<blockquote>
+<p>"出关键点 → 算关节角度""肘/肩/腕/髋/膝正好覆盖挥拍角度"</p>
+</blockquote>
+<p>而 <code>04</code> 和 <code>05</code> 明确警告：</p>
+<blockquote>
+<p>"不要用 2D 像素坐标算角度""论文里那些关节角度全部来自 3D 动捕，单目手机视频算不出真值"</p>
+</blockquote>
+<p><strong>这两组说法是直接冲突的</strong>，而且新手看不出来——因为两组话分开读都很有道理。</p>
+<p>审校 agent 的判定是 <code>04</code>/<code>05</code> 对，并要求给所有角度指标加上"<strong>2D 投影角</strong>"的限定和误差量级说明
+（它引用的对照研究里，单目相对 3D 动捕会系统性低估髋角约 11.2°、膝角约 10.6°）。</p>
+<blockquote>
+<p>📌 <strong>教训 2：AI 在"A 和 B 冲突"这件事上，比在"A 对不对"上更可靠。</strong>
+让单个 agent 自查"我写得对吗"，它倾向于说对；
+让一个 agent 拿两份稿子对照"这两个说法冲突吗"，它能立刻指出来。
+<strong>矛盾检测是多 agent 性价比最高的用法。</strong></p>
+</blockquote>
+<h3 id="案例-C6-个-agent-集体漏掉的那条主线">案例 C：6 个 agent 集体漏掉的那条主线</h3>
+<p>审校报告里最尖锐的一条：</p>
+<blockquote>
+<p><strong><code>02</code> 之外无人提球；<code>02</code> 提了但用错方法。</strong>
+后果：击球帧、击球点高度、落点、球速、回合节奏这五个<strong>最贴近"运动表现"的量</strong>，
+全套笔记里没有可靠来源。</p>
+<p>而 <code>05</code> 自己在引用论文时其实已经说出了答案——"<strong>球轨迹是主线索而非辅助</strong>"——
+却只在角落里提了一句。</p>
+</blockquote>
+<p><strong>注意这件事的性质</strong>：这不是某个 agent 写错了，而是<strong>6 个 agent 各自的视野里都合理，
+合起来却缺了一整条主线</strong>。目标检测的 agent 讲检测，姿态的 agent 讲骨架，
+谁也不觉得"球"是自己的责任。</p>
+<blockquote>
+<p>📌 <strong>教训 3：单点错误靠验证者，系统性盲区靠"全局审阅者"。</strong>
+所以审校那个 agent 的提示词里，我特意加了第 3 条要求：
+"<strong>找出明显缺口</strong>：对'羽毛球运动表现分析'这个目标，还有什么关键环节没人讲。"
+如果只让它"找错"，这个盲区<strong>永远不会被发现</strong>。</p>
+</blockquote>
+<hr>
+<h2 id="五审校-agent-也诚实地说了我不知道">五、审校 agent 也诚实地说了"我不知道"</h2>
+<p>报告的最后两节值得单独看：</p>
+<blockquote>
+<ul>
+<li><strong>未复核</strong>：各类精度数字的原始实验条件、生物力学误差数字的原文细节、
+  TrackNetV3 仓库的权重文件名与 <code>train.py</code> 参数（受网络限制）。</li>
+<li><strong>未打开全文、仅依据搜索结果判定的项</strong>：……这些在文中已标注"待复核"，请在使用前自行打开确认。</li>
+</ul>
+</blockquote>
+<p>它列了 5 处<strong>自己也没核实成功</strong>的地方，明确标成"待复核"。</p>
+<blockquote>
+<p>📌 <strong>教训 4：一个会承认"我不确定"的验证者，才是可信的验证者。</strong>
+反过来：如果审校 agent 返回的是"全部检查完毕，没有发现问题"——
+<strong>那多半不是好消息，而是它没认真查。</strong>
+验收验证者的产出时，看它有没有"待复核"清单。没有 = 大概率在敷衍。</p>
+</blockquote>
+<hr>
+<h2 id="六这次运行暴露出的能力边界">六、这次运行暴露出的能力边界</h2>
+<p>诚实记录，避免你把多 agent 想得太神：</p>
+<table>
+<thead>
+<tr>
+<th>局限</th>
+<th>这次的具体表现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>不能替代领域专家</strong></td>
+<td>6 个 agent 都把"单目能不能算关节角"当成一个技术细节，没意识到这是整个项目<strong>能不能立住</strong>的前提</td>
+</tr>
+<tr>
+<td><strong>审校也查不出源头错误</strong></td>
+<td>审校能发现"两份笔记冲突"，但<strong>没法判断两份都错</strong>的情况</td>
+</tr>
+<tr>
+<td><strong>核实受网络限制</strong></td>
+<td>有 5 处因为打不开原文而只能标"待复核"</td>
+</tr>
+<tr>
+<td><strong>不知道你的真实约束</strong></td>
+<td>所有 agent 都不知道你"Python 实操很少、主要靠 AI 助手"——这个信息<strong>是我在本次会话里问出来的</strong>，不是它们调研出来的</td>
+</tr>
+<tr>
+<td><strong>会给你一个"看起来完整"的假象</strong></td>
+<td>74 KB、结构整齐、有链接——<strong>它给人的确定感，远高于它实际的确定度</strong></td>
+</tr>
+</tbody>
+</table>
+<p>最后一条最危险，展开说：</p>
+<blockquote>
+<p>一份排版精美、带引用链接、覆盖全面的调研笔记，
+<strong>读起来像是"已经调研清楚了"</strong>。
+但审校报告告诉我们：里面至少 12 处数字是错的、3 条命令跑不通、一整条主线缺失。</p>
+<p><strong>多 agent 让产出的"量"和"表面质量"提升得很快，让"正确性"提升得很慢。</strong>
+所以——<strong>验证环节的投入，不该少于生产环节。</strong></p>
+</blockquote>
+<hr>
+<h2 id="七这次运行教给你的五条">七、这次运行教给你的五条</h2>
+<ol>
+<li><strong>扇出必须配收口。</strong> 6 路调研 + 1 路仲裁，比 7 路调研有价值得多。</li>
+<li><strong>让 agent 落盘，只让它回传摘要。</strong> 否则上下文会被撑爆，后面的活全干不了。</li>
+<li><strong>验证者的提示词要显式授权挑错，并给它核实手段。</strong> 不授权，它会敷衍。</li>
+<li><strong>除了"找错"，还要让验证者"找缺口"。</strong> 系统性盲区只有全局视角能看见。</li>
+<li><strong>看到整齐的产出，先找它的"待复核"清单。</strong> 没有，就是可疑信号。</li>
+</ol>
+<hr>
+<h2 id="八你现在可以自己复现">八、你现在可以自己复现</h2>
+<p><code>examples/04-research-pipeline.js</code> 就是这个流程的简化可运行版本（3 个专题走 2 个 stage）。</p>
+<p><strong>建议的最短路径</strong>：</p>
+<ol>
+<li>打开 <code>examples/01-hello-fanout.js</code>，原样跑一次 —— 感受"同时开 3 个 agent"</li>
+<li>换成你自己的 3 个真实问题</li>
+<li>加上 <code>examples/02-producer-verifier.js</code> 的审校阶段 —— <strong>这一步会让你改变对 AI 产出的信任度</strong></li>
+<li>打开 GUI 看那几张小卡片，观察它们什么时候起、什么时候落</li>
+</ol>
+<p>跑完第 3 步，你就真正理解多 agent 的价值在哪了。</p>
+<div class="pager">
+<a class="prev" href="p1-04.html"><span class="lbl">上一篇</span><span class="ttl">workflow 脚本编写</span></a>
+<a class="next" href="p2-01.html"><span class="lbl">下一篇</span><span class="ttl">总览与技术路线</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

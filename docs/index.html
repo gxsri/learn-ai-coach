@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>羽毛球 AI 教练 · 多 agent 协作 · YOLO · 运动骨架分析</title>
+<meta name="description" content="多 agent 协作 · YOLO · 运动骨架分析">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html" class="current">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<section class="hero"><h1>把 AI 变成你的<em>羽毛球教练</em></h1><p class="lede">一套从零开始的学习包：先用多 agent 把技术版图调研清楚，再用 YOLO 和骨架分析把手机拍的羽毛球视频变成可读的动作指标。所有代码都在真机上跑通过。</p><div class="cta"><a class="btn primary" href="p2-01.html">从技术路线开始 →</a><a class="btn ghost" href="p1-03.html">学搭自己的 agent</a><a class="btn ghost" href="starter.html">看能跑的代码</a></div></section>
+<h2 class="section-title">路线 A · 多 agent 协作</h2>
+<p class="section-sub">怎么指挥一支 AI 队伍</p>
+<div class="cards">
+<a class="card" href="p1-01.html"><div class="kicker">路线 A</div><h3>为什么需要多 agent</h3><p>单 agent 的三面墙、五种协作模式，以及什么时候<strong>不该</strong>用多 agent。</p></a>
+<a class="card" href="p1-02.html"><div class="kicker">路线 A</div><h3>DSH 多 agent 机制全解</h3><p>宿主平面 vs 预设平面、subagent / fork / workflow / ralph 四种分身的取舍。</p></a>
+<a class="card" href="p1-03.html"><div class="kicker">路线 A</div><h3>手把手搭建 preset</h3><p>从零造一个只有你有的 agent：人格、工具裁剪、自定义 .mjs 插件、挂载校验。</p></a>
+<a class="card" href="p1-04.html"><div class="kicker">路线 A</div><h3>workflow 脚本编写</h3><p>用一段 JS 编排一支 agent 队伍：并行、流水线、结构化返回、失败项报告。</p></a>
+<a class="card" href="p1-05.html"><div class="kicker">路线 A</div><h3>实战复盘：43 条错误</h3><p>7 个 agent 并行调研 + 交叉审校的真实数据，以及多 agent 的能力边界。</p></a>
+</div>
+<h2 class="section-title">路线 B · YOLO 与骨架分析</h2>
+<p class="section-sub">怎么做出羽毛球动作分析</p>
+<div class="cards">
+<a class="card" href="p2-01.html"><div class="kicker">路线 B</div><h3>总览与技术路线</h3><p>先看这篇：完整流水线图，以及<strong>做得到 / 做不到</strong>的现实校验。</p></a>
+<a class="card" href="p2-02.html"><div class="kicker">路线 B</div><h3>YOLO 从零到能用</h3><p>版本乱象、许可证、环境安装、第一个模型、标注格式、训练与读懂指标。</p></a>
+<a class="card" href="p2-03.html"><div class="kicker">路线 B</div><h3>姿态估计与骨架提取</h3><p>方案选型、羽毛球场景的四个困难、拿到关键点后必须做的四件事。</p></a>
+<a class="card" href="p2-04.html"><div class="kicker">路线 B</div><h3>羽毛球分析实战</h3><p>击球检测、投影角、场地标定、动作分类、评估协议、报告该写什么。</p></a>
+<a class="card" href="p2-05.html"><div class="kicker">路线 B</div><h3>常见坑与调试</h3><p>工具书：读报错、环境问题、视频读写、跟踪失败，以及怎么让 AI 帮你调试。</p></a>
+</div>
+<h2 class="section-title">代码与资料</h2>
+<p class="section-sub">能跑的代码、调研笔记、agent 预设</p>
+<div class="cards">
+<a class="card" href="starter.html"><div class="kicker">代码与资料</div><h3>可运行代码骨架</h3><p>视频 → 骨架 → 击球事件 → 报告，含 26 项算法自检和合成数据生成器。</p></a>
+<a class="card" href="preset-coach.html"><div class="kicker">代码与资料</div><h3>示例 agent 预设</h3><p>一个可以直接装进 DSH 的预设：专属人格 + 自定义工具插件。</p></a>
+<a class="card" href="research-00.html"><div class="kicker">代码与资料</div><h3>审校报告（43 条纠错）</h3><p>6 份调研笔记的事实核查结果：12 处版本错误、3 条跑不通的命令、8 处矛盾。</p></a>
+<a class="card" href="research-01.html"><div class="kicker">代码与资料</div><h3>调研 01 · YOLO 全景</h3><p>版本序列、任务类型、8GB 显存下的选型。</p></a>
+<a class="card" href="research-02.html"><div class="kicker">代码与资料</div><h3>调研 02 · 数据集与训练</h3><p>抽帧、标注、data.yaml、训练参数、指标解读。</p></a>
+<a class="card" href="research-03.html"><div class="kicker">代码与资料</div><h3>调研 03 · 姿态估计</h3><p>六种方案对比、COCO-17 索引、3D 值不值得学。</p></a>
+<a class="card" href="research-04.html"><div class="kicker">代码与资料</div><h3>调研 04 · 骨架时序</h3><p>ST-GCN/PoseC3D 学术路线 vs 特征工程 + sklearn 工程路线。</p></a>
+<a class="card" href="research-05.html"><div class="kicker">代码与资料</div><h3>调研 05 · 羽毛球专项</h3><p>ShuttleSet、TrackNet、单目 2D 的硬边界。</p></a>
+<a class="card" href="research-06.html"><div class="kicker">代码与资料</div><h3>调研 06 · 工程与部署</h3><p>视频读写、骨架渲染、Gradio、项目结构。</p></a>
+</div>
+<footer class="site-footer">用 DSH 的 7 个 agent 调研 + 交叉审校产出 · 代码在 RTX 4060 / torch 2.11 / ultralytics 8.4.153 上验证通过</footer>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

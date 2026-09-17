@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>羽毛球分析实战 · 羽毛球 AI 教练</title>
+<meta name="description" content="击球检测、投影角、场地标定、动作分类、评估协议、报告该写什么。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html" class="current"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">路线 B · YOLO 与骨架分析</span></div>
+<h1 id="04-羽毛球运动表现分析实战">04 · 羽毛球运动表现分析实战</h1>
+<blockquote>
+<p>目标：从 <code>01_pose.csv</code> 走到"一份带指标的报告"。
+这一篇不需要显卡，是纯数据处理——也是<strong>最容易被做错</strong>的一环。</p>
+</blockquote>
+<hr>
+<h2 id="一你最终能交付什么">一、你最终能交付什么</h2>
+<div class="codehilite"><pre><span></span><code>outputs/&lt;session_id&gt;/
+├── 01_pose.csv          ← 骨架原始数据（每帧每人的 17 点）
+├── 02_events.csv        ← 检测到的击球事件列表
+├── 03_metrics.json      ← 汇总指标
+├── overlay.mp4          ← 带骨架 + 角度的叠加视频
+├── curves.png           ← 时序曲线图
+└── report.html          ← 一页式报告
+</code></pre></div>
+
+<p><strong><code>session_id</code> 这个东西很重要，不要省。</strong> 它是"同一场比赛/同一次拍摄"的唯一标识。
+后面做数据划分、做纵向对比，全靠它。<strong>没有它，你的评估一定是错的</strong>（见本文第六节）。</p>
+<hr>
+<h2 id="二核心思路先找击球再算在这一瞬间的动作">二、核心思路：先找"击球"，再算"在这一瞬间的动作"</h2>
+<p>羽毛球的动作分析不是"逐帧分析"，而是"<strong>围绕击球的那几帧分析</strong>"。</p>
+<div class="codehilite"><pre><span></span><code>速度
+ │                    ╭╮  ← 击球瞬间（手腕速度峰值）
+ │                   ╱  ╲
+ │              ╭───╯    ╰───╮
+ │      ╭──────╯              ╰──────╮
+ └──────┴────────────────────────────┴────→ 时间
+        准备        挥拍     随挥
+</code></pre></div>
+
+<p><strong>所以第一步永远是：把手腕速度的峰值找出来。</strong></p>
+<hr>
+<h2 id="三击球时刻检测">三、击球时刻检测</h2>
+<h3 id="原理">原理</h3>
+<p>击球瞬间，<strong>持拍手的手腕速度</strong>是一整个动作里的局部最大值。</p>
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">detect_hit_events</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">track_id</span><span class="p">,</span> <span class="n">wrist_idx</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+                      <span class="n">min_gap_frames</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">min_speed_per_sec</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span>
+                      <span class="n">conf_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    从一个人的骨架序列里找出击球事件。</span>
+
+<span class="sd">    参数说明：</span>
+<span class="sd">      wrist_idx       : 用哪只手的手腕。9=左手腕，10=右手腕</span>
+<span class="sd">      min_gap_frames  : 两次击球至少间隔多少帧（防止一个动作被拆成好几个峰）</span>
+<span class="sd">      min_speed_per_sec: 速度阈值，低于它不算击球（单位：肩宽/秒）</span>
+<span class="sd">      conf_threshold  : 关键点置信度低于它，这一帧的点不可信</span>
+<span class="sd">    """</span>
+    <span class="n">person</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="s1">'track_id'</span><span class="p">]</span> <span class="o">==</span> <span class="n">track_id</span><span class="p">]</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s1">'frame'</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">person</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="n">frames</span> <span class="o">=</span> <span class="n">person</span><span class="p">[</span><span class="s1">'frame'</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">person</span><span class="p">[</span><span class="sa">f</span><span class="s1">'x</span><span class="si">{</span><span class="n">wrist_idx</span><span class="si">}</span><span class="s1">'</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">person</span><span class="p">[</span><span class="sa">f</span><span class="s1">'y</span><span class="si">{</span><span class="n">wrist_idx</span><span class="si">}</span><span class="s1">'</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">person</span><span class="p">[</span><span class="sa">f</span><span class="s1">'c</span><span class="si">{</span><span class="n">wrist_idx</span><span class="si">}</span><span class="s1">'</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+    <span class="c1"># ① 用肩宽归一化，消除距离/身高差异</span>
+    <span class="n">sw</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hypot</span><span class="p">(</span><span class="n">person</span><span class="p">[</span><span class="s1">'x5'</span><span class="p">]</span> <span class="o">-</span> <span class="n">person</span><span class="p">[</span><span class="s1">'x6'</span><span class="p">],</span> <span class="n">person</span><span class="p">[</span><span class="s1">'y5'</span><span class="p">]</span> <span class="o">-</span> <span class="n">person</span><span class="p">[</span><span class="s1">'y6'</span><span class="p">])</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">sw</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">sw</span> <span class="o">&lt;</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">sw</span><span class="p">)</span>      <span class="c1"># 肩宽算不出来就标 NaN</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmedian</span><span class="p">(</span><span class="n">sw</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span> <span class="ow">or</span> <span class="n">scale</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="c1"># ② 平滑（必须！否则全是噪声）</span>
+    <span class="n">x_s</span> <span class="o">=</span> <span class="n">savgol_smooth</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">window</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">polyorder</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">y_s</span> <span class="o">=</span> <span class="n">savgol_smooth</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">window</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">polyorder</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="c1"># ③ 逐帧速度（单位：肩宽/秒）</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">fps</span>
+    <span class="n">vx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">x_s</span><span class="p">)</span> <span class="o">/</span> <span class="n">dt</span>
+    <span class="n">vy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">y_s</span><span class="p">)</span> <span class="o">/</span> <span class="n">dt</span>
+    <span class="n">speed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hypot</span><span class="p">(</span><span class="n">vx</span><span class="p">,</span> <span class="n">vy</span><span class="p">)</span> <span class="o">/</span> <span class="n">scale</span>
+
+    <span class="c1"># ④ 置信度太低的帧，速度不可信 → 置 0</span>
+    <span class="n">speed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">c</span> <span class="o">&gt;=</span> <span class="n">conf_threshold</span><span class="p">,</span> <span class="n">speed</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+
+    <span class="c1"># ⑤ 找局部峰值</span>
+    <span class="n">events</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">last_hit</span> <span class="o">=</span> <span class="o">-</span><span class="mi">10</span><span class="o">**</span><span class="mi">9</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">speed</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">speed</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">min_speed_per_sec</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">speed</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">speed</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="ow">and</span> <span class="n">speed</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">speed</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]):</span>
+            <span class="k">continue</span>                     <span class="c1"># 不是局部最大</span>
+        <span class="k">if</span> <span class="n">frames</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="n">last_hit</span> <span class="o">&lt;</span> <span class="n">min_gap_frames</span><span class="p">:</span>
+            <span class="c1"># 离上一次击球太近 → 保留更快的那个</span>
+            <span class="k">if</span> <span class="n">events</span> <span class="ow">and</span> <span class="n">speed</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">events</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s1">'speed'</span><span class="p">]:</span>
+                <span class="n">events</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'frame'</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">frames</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="s1">'speed'</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">speed</span><span class="p">[</span><span class="n">i</span><span class="p">])}</span>
+                <span class="n">last_hit</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">frames</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="k">continue</span>
+        <span class="n">events</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">'frame'</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">frames</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="s1">'speed'</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">speed</span><span class="p">[</span><span class="n">i</span><span class="p">])})</span>
+        <span class="n">last_hit</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">frames</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">events</span>
+</code></pre></div>
+
+<h3 id="参数怎么定">参数怎么定</h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>怎么调</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wrist_idx</code></td>
+<td>先搞清楚球员是左手还是右手持拍。<strong>背对镜头时容易搞反</strong></td>
+</tr>
+<tr>
+<td><code>min_gap_frames</code></td>
+<td>30fps 下一次挥拍约 0.3-0.5 秒 = <strong>10-15 帧</strong>。设太小会把一个动作拆成 2 个峰</td>
+</tr>
+<tr>
+<td><code>min_speed_per_sec</code></td>
+<td><strong>先跑一次，把 <code>speed</code> 曲线画出来，看峰和谷差多少</strong>，再定阈值。不要凭感觉设</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="warn">
+<p><strong>⚠️ 这段代码里最重要的一行</strong>是 <code>speed = np.where(c &gt;= conf_threshold, speed, 0.0)</code>。
+没有这一行，一个置信度 0.1 的乱跳手腕会产生一个假峰值，你就多出一次"击球"。</p>
+</blockquote>
+<h3 id="三种信号可以互相校验">三种信号可以互相校验</h3>
+<table>
+<thead>
+<tr>
+<th>信号</th>
+<th>原理</th>
+<th>可靠性</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>手腕速度峰值</strong></td>
+<td>击球时手最快</td>
+<td>高（你主要用这个）</td>
+</tr>
+<tr>
+<td><strong>球轨迹方向突变</strong></td>
+<td>球被拍击改变方向</td>
+<td>高，但<strong>需要先做球轨迹追踪（TrackNetV3）</strong></td>
+</tr>
+<tr>
+<td><strong>击球声 onset</strong></td>
+<td>击球有独特的爆音</td>
+<td>高，<strong>且最便宜</strong>——只要视频有音轨</td>
+</tr>
+</tbody>
+</table>
+<p><strong>三种信号对齐到同一时间轴，取交集</strong>，是目前最可靠的方案。
+<code>part1</code> 里提到的那篇羽毛球论文也强调"球轨迹是主线索"，所以<strong>后期加上球轨迹会让击球检测质量上一个台阶</strong>。</p>
+<hr>
+<h2 id="四投影角计算">四、投影角计算</h2>
+<h3 id="代码">代码</h3>
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">angle_at</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""计算以 b 为顶点的夹角（度）。a、b、c 都是 (x, y) 坐标。"""</span>
+    <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+    <span class="n">v1</span> <span class="o">=</span> <span class="n">a</span> <span class="o">-</span> <span class="n">b</span>
+    <span class="n">v2</span> <span class="o">=</span> <span class="n">c</span> <span class="o">-</span> <span class="n">b</span>
+    <span class="n">n1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">v1</span><span class="p">)</span>
+    <span class="n">n2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">v2</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">n1</span> <span class="o">&lt;</span> <span class="mf">1e-6</span> <span class="ow">or</span> <span class="n">n2</span> <span class="o">&lt;</span> <span class="mf">1e-6</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>                    <span class="c1"># 两点重合，算不出角度</span>
+
+    <span class="n">cos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">v1</span><span class="p">,</span> <span class="n">v2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">n1</span> <span class="o">*</span> <span class="n">n2</span><span class="p">),</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">degrees</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">cos</span><span class="p">)))</span>
+</code></pre></div>
+
+<p><strong>用法</strong>（持拍侧是右手时）：</p>
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="c1"># 右肘角 = 右肩(6) - 右肘(8) - 右腕(10) 三点</span>
+<span class="n">elbow</span> <span class="o">=</span> <span class="n">angle_at</span><span class="p">(</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">'x8'</span><span class="p">],</span>  <span class="n">row</span><span class="p">[</span><span class="s1">'y8'</span><span class="p">]),</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">'x6'</span><span class="p">],</span>  <span class="n">row</span><span class="p">[</span><span class="s1">'y6'</span><span class="p">]),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">'x10'</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">'y10'</span><span class="p">]),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<h3 id="这个数字是什么不是什么">⚠️ 这个数字是什么，不是什么</h3>
+<p><strong>它是"画面投影角"，不是生物力学意义上的关节角。</strong></p>
+<ul>
+<li>单目 2D 姿态估计的关节角有<strong>系统性低估</strong>。一项以 3D 光学动捕为对照的研究测得
+  髋约 <strong>−11.2°</strong>、膝约 <strong>−10.6°</strong> 的低估；即使做几何修正，残余误差仍有髋约 4.0°、膝约 3.9°</li>
+<li>而且那个结果还是建立在<strong>固定机位、固定距离、只有一个矢状面动作</strong>的前提上</li>
+</ul>
+<p><strong>必须做的</strong>：</p>
+<ol>
+<li>报告里写清楚"<strong>2D 投影角</strong>"，不要写成"关节角度"</li>
+<li><strong>机位在整个项目里保持一致</strong>——不同机位的投影角根本不能比</li>
+<li><strong>只做纵向对比</strong>（同一个人、同一机位、不同时间），<strong>不要跟别人的论文数字比</strong></li>
+<li>如果角度差异在 <strong>±10° 以内，不要下结论</strong></li>
+</ol>
+<blockquote>
+<p><strong>这四句话不是免责声明，是正确使用方法的说明书。</strong>
+做了这四件事，你的报告是诚实且有价值的工具；
+不做，它就是一个看起来很专业的错误。</p>
+</blockquote>
+<h3 id="可算的角">可算的角</h3>
+<table>
+<thead>
+<tr>
+<th>角度</th>
+<th>三点</th>
+<th>可用于</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>右肘角</td>
+<td>6-8-10</td>
+<td>挥拍动作、发力幅度</td>
+</tr>
+<tr>
+<td>左肘角</td>
+<td>5-7-9</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>右肩角</td>
+<td>8-6-12</td>
+<td>手臂抬起高度（近似）</td>
+</tr>
+<tr>
+<td>右膝角</td>
+<td>12-14-16</td>
+<td>蹬地、弓步深度（近似）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>算不了的</strong>：肩内旋、躯干旋转、髋-肩分离角 —— 这些需要 3D 或绕纵轴的信息，
+单目投影里<strong>信息上就不存在</strong>。</p>
+<hr>
+<h2 id="五场地标定把像素变成米">五、场地标定：把像素变成米</h2>
+<h3 id="为什么必须做">为什么必须做</h3>
+<p>不做标定，你只能输出"像素/秒"，这个数字<strong>换一个机位就毫无意义</strong>。</p>
+<h3 id="需要的真值背下来">需要的真值（背下来）</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>数值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>场地总长</td>
+<td><strong>13.40 m</strong></td>
+</tr>
+<tr>
+<td>双打场地宽</td>
+<td><strong>6.10 m</strong></td>
+</tr>
+<tr>
+<td>单打场地宽</td>
+<td><strong>5.18 m</strong></td>
+</tr>
+<tr>
+<td>网高（中央）</td>
+<td><strong>1.524 m</strong></td>
+</tr>
+<tr>
+<td>网高（网柱处）</td>
+<td><strong>1.55 m</strong></td>
+</tr>
+<tr>
+<td>前发球线到网</td>
+<td>1.98 m</td>
+</tr>
+<tr>
+<td>双打后发球线到端线</td>
+<td>0.76 m</td>
+</tr>
+</tbody>
+</table>
+<h3 id="做法单应变换Homography">做法：单应变换（Homography）</h3>
+<p><strong>原理一句话</strong>：平面上 4 个点就能确定"像素坐标 ↔ 真实坐标"的映射关系。</p>
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">cv2</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># ① 在视频里手工点出球场 4 个角（或用球场线检测算法自动找）</span>
+<span class="c1">#    顺序必须和下面 image_points 一一对应！</span>
+<span class="n">pixel_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+    <span class="p">[</span> <span class="mi">320</span><span class="p">,</span>  <span class="mi">180</span><span class="p">],</span>    <span class="c1"># 左上角，画面里选一个真实角</span>
+    <span class="p">[</span> <span class="mi">960</span><span class="p">,</span>  <span class="mi">180</span><span class="p">],</span>    <span class="c1"># 右上角</span>
+    <span class="p">[</span> <span class="mi">960</span><span class="p">,</span>  <span class="mi">620</span><span class="p">],</span>    <span class="c1"># 右下角</span>
+    <span class="p">[</span> <span class="mi">320</span><span class="p">,</span>  <span class="mi">620</span><span class="p">],</span>    <span class="c1"># 左下角</span>
+<span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+<span class="c1"># ② 这 4 个角在真实世界的位置（单位：米）。注意和上面顺序严格对应。</span>
+<span class="c1">#    这个例子是"半边球场"，宽 6.10m，深 6.70m（13.40/2）</span>
+<span class="n">world_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+    <span class="p">[</span><span class="mf">0.00</span><span class="p">,</span> <span class="mf">0.00</span><span class="p">],</span>
+    <span class="p">[</span><span class="mf">6.10</span><span class="p">,</span> <span class="mf">0.00</span><span class="p">],</span>
+    <span class="p">[</span><span class="mf">6.10</span><span class="p">,</span> <span class="mf">6.70</span><span class="p">],</span>
+    <span class="p">[</span><span class="mf">0.00</span><span class="p">,</span> <span class="mf">6.70</span><span class="p">],</span>
+<span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+<span class="c1"># ③ 求单应矩阵</span>
+<span class="n">H</span><span class="p">,</span> <span class="n">status</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">findHomography</span><span class="p">(</span><span class="n">pixel_points</span><span class="p">,</span> <span class="n">world_points</span><span class="p">)</span>
+
+<span class="c1"># ④ 换算任意像素点到真实坐标</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">pixel_to_world</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+    <span class="n">pt</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[[</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">y</span><span class="p">)]]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">perspectiveTransform</span><span class="p">(</span><span class="n">pt</span><span class="p">,</span> <span class="n">H</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+</code></pre></div>
+
+<h3 id="怎么知道标定准不准">怎么知道标定准不准</h3>
+<p><strong>重投影误差检查</strong>：把真实坐标用 <code>H</code> 的逆变换映射回像素，和原始像素点比。</p>
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="n">H_inv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">H</span><span class="p">)</span>
+<span class="n">back</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">perspectiveTransform</span><span class="p">(</span><span class="n">pixel_points</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">H_inv</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">error</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">back</span> <span class="o">-</span> <span class="n">pixel_points</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">'重投影误差（像素）:'</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+<span class="c1"># 应该都在 1-2 像素以内。超过 5 像素说明四个角点选得不好</span>
+</code></pre></div>
+
+<p><strong>更实用的检查</strong>：用标定后的坐标算一下<strong>球场的宽度</strong>，看是不是 6.10 米。
+差太多就是标定错了。</p>
+<blockquote class="warn">
+<p>⚠️ <strong>一个必须诚实说明的限制</strong>：单应变换成立的前提是"所有点都在同一个平面上"。
+球员的身体是立体的，<strong>点在地上是对的，点在空中的高度是算不准的</strong>。
+想算"击球点离地多高"，严格来说需要额外的假设（比如"脚在场上"来推算身高比例），
+误差会明显变大。<strong>要么别做，要么明确标注误差范围。</strong></p>
+</blockquote>
+<hr>
+<h2 id="六动作分类两条路选哪条">六、动作分类：两条路，选哪条</h2>
+<h3 id="路线-A学术路线现在不推荐">路线 A：学术路线（现在<strong>不推荐</strong>）</h3>
+<p>ST-GCN、2s-AGCN、CTR-GCN、PoseC3D 这些基于骨架的动作识别方法，
+在 NTU-RGB+D 这类数据集上表现很好，但：</p>
+<ul>
+<li>它们<strong>吃的是大规模标注数据</strong>（NTU 有 5 万多段）</li>
+<li><strong>公开的、带羽毛球击球类型标签的视频数据集，个人拿不到</strong></li>
+<li>有论文尝试过（比如用 Transformer 融合骨架 + 球轨迹做击球类型识别），
+  但论文<strong>自己也指出</strong>：通用骨架动作识别模型会把不同的挥拍动作<strong>糊成"击球"一类</strong>——
+  因为 <code>smash</code> 和 <code>wrist smash</code> 的区别非常细微</li>
+</ul>
+<p><strong>结论</strong>：这条路的门槛不是算法，是<strong>数据</strong>。个人项目走不通。</p>
+<h3 id="路线-B工程路线推荐">路线 B：工程路线（<strong>推荐</strong>）</h3>
+<p><strong>核心思路：不要"学"动作，而是"用可解释的特征 + 简单分类器"。</strong></p>
+<div class="codehilite"><pre><span></span><code>① 从每个击球事件前后各取 ~1 秒的骨架片段
+        ↓
+② 提取可解释特征：
+   · 击球瞬间的手腕高度（相对肩宽）
+   · 击球瞬间的肘角、肩角
+   · 手腕速度峰值
+   · 挥拍前后的髋中心位移（移动距离）
+   · 片段内手腕的运动方向（向上/向下/平）
+        ↓
+③ 用 sklearn 的 SVM / RandomForest / XGBoost 分类
+        ↓
+④ 用 DTW 做模板匹配（如果你有"标准动作"的参考片段）
+</code></pre></div>
+
+<p><strong>为什么这条更现实</strong>：</p>
+<ul>
+<li>特征<strong>可解释</strong>——你能说清楚"为什么判成杀球"（手腕高于肩、速度峰值大、向下挥）</li>
+<li>训练数据需求小 —— 几百个样本就能起步</li>
+<li><strong>你自己标几十个击球就能开始</strong>，而不是等一个几万条的数据集</li>
+</ul>
+<p><strong>先用规则，再用模型。</strong> 一个经验规则就能抓住大部分情况：</p>
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">rough_classify</span><span class="p">(</span><span class="n">hit</span><span class="p">,</span> <span class="n">kp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""最粗糙的击球类型判断。先用它跑通，再逐步改进。"""</span>
+    <span class="n">wrist_y</span>   <span class="o">=</span> <span class="n">kp</span><span class="p">[</span><span class="s1">'right_wrist_y'</span><span class="p">]</span>
+    <span class="n">shoulder_y</span> <span class="o">=</span> <span class="n">kp</span><span class="p">[</span><span class="s1">'right_shoulder_y'</span><span class="p">]</span>
+    <span class="n">speed</span>      <span class="o">=</span> <span class="n">hit</span><span class="p">[</span><span class="s1">'speed'</span><span class="p">]</span>
+
+    <span class="c1"># 注意：图像坐标 y 向下增大，所以"手腕高于肩"是 y 更小</span>
+    <span class="k">if</span> <span class="n">wrist_y</span> <span class="o">&lt;</span> <span class="n">shoulder_y</span> <span class="o">-</span> <span class="mf">0.3</span> <span class="o">*</span> <span class="n">kp</span><span class="p">[</span><span class="s1">'shoulder_width'</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="s1">'杀球/高点击球'</span> <span class="k">if</span> <span class="n">speed</span> <span class="o">&gt;</span> <span class="mi">6</span> <span class="k">else</span> <span class="s1">'高远球/吊球'</span>
+    <span class="k">return</span> <span class="s1">'低手击球（挑球/搓球/平抽）'</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>先把这条规则跑通，再考虑上模型。</strong> 你会发现规则能做到 70-80%，
+而剩下的 20-30% 才是机器学习真正要解决的问题。</p>
+</blockquote>
+<h3 id="长什么样的数据是不能做的">长什么样的数据是"不能做的"</h3>
+<p>❌ 用通用骨架动作识别模型直接跑到你的视频上，然后宣称能识别杀球/吊球/挑球。
+这几乎肯定是不准的，而你还不知道它不准。</p>
+<hr>
+<h2 id="七评估协议这一节能让你的项目从玩具变成可用">七、评估协议：这一节能让你的项目从"玩具"变成"可用"</h2>
+<h3 id="最常见的致命错误按帧随机划分数据">⚠️ 最常见的致命错误：按帧随机划分数据</h3>
+<p>如果你把每帧当成一个独立样本，随机分成训练集和测试集——
+<strong>同一个回合的相邻两帧几乎完全一样，它们会被分到训练集和测试集两边</strong>。
+结果就是准确率虚高十几个百分点，而模型实际一点用都没有。</p>
+<p><strong>正确做法</strong>：</p>
+<div class="codehilite"><pre data-lang="python"><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.model_selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">GroupKFold</span>
+
+<span class="c1"># ★ 用 session_id / player_id 分组，绝不能按帧随机切</span>
+<span class="n">gkf</span> <span class="o">=</span> <span class="n">GroupKFold</span><span class="p">(</span><span class="n">n_splits</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">train_idx</span><span class="p">,</span> <span class="n">test_idx</span> <span class="ow">in</span> <span class="n">gkf</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">groups</span><span class="o">=</span><span class="n">df</span><span class="p">[</span><span class="s1">'session_id'</span><span class="p">]):</span>
+    <span class="o">...</span>
+</code></pre></div>
+
+<p><strong>规则</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>划分方式</th>
+<th>能不能用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>按帧随机切</td>
+<td>❌ <strong>绝对不行</strong></td>
+</tr>
+<tr>
+<td>按回合切</td>
+<td>✅ 可以</td>
+</tr>
+<tr>
+<td><strong>按比赛 / 按 session 切</strong></td>
+<td>✅ <strong>最好</strong></td>
+</tr>
+<tr>
+<td>按球员切（测跨人泛化）</td>
+<td>✅ 更严格</td>
+</tr>
+</tbody>
+</table>
+<h3 id="从第一步就把-session_id-写进数据里">📌 从第一步就把 <code>session_id</code> 写进数据里</h3>
+<p>在 <code>02_extract_pose.py</code> 阶段就写进去，别等到要训练了才想起来。
+<strong>中间产物（CSV、npz）全都要带 <code>session_id</code> 和 <code>player_id</code> 列。</strong></p>
+<h3 id="可信度评估很少有人做但很值钱">可信度评估（很少有人做，但很值钱）</h3>
+<table>
+<thead>
+<tr>
+<th>检查</th>
+<th>怎么做</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>重复性检验</strong></td>
+<td>同一段视频跑两遍，指标差异应该接近 0</td>
+</tr>
+<tr>
+<td><strong>机位敏感性</strong></td>
+<td>换一个机位拍同一个动作，看指标变化多少——变化大就说明该指标不可靠</td>
+</tr>
+<tr>
+<td><strong>关键点误差传递</strong></td>
+<td>关键点抖动 ±5 像素时，你的角度会变多少度？算出来写进报告</td>
+</tr>
+<tr>
+<td><strong>阈值约定</strong></td>
+<td>明确写出"角度差异小于 X° 不下结论"</td>
+</tr>
+</tbody>
+</table>
+<p><strong>做了这四项，你的报告就从"技术笔记"升级成"分析报告"。</strong></p>
+<hr>
+<h2 id="八报告该写什么">八、报告该写什么</h2>
+<p>一份诚实的报告结构：</p>
+<div class="codehilite"><pre data-lang="markdown"><span></span><code><span class="gu">## 本次分析</span>
+
+<span class="gs">**视频**</span>：2026-09-14_训练场_A机位.mp4
+<span class="gs">**机位**</span>：固定，侧对球场，距离约 6m
+<span class="gs">**球员**</span>：本人（右手持拍）
+<span class="gs">**场地标定**</span>：已完成，重投影误差 1.8 像素
+
+<span class="gu">## 检测到的击球</span>
+
+| 序号 | 帧号 | 时间 | 手腕速度(肩宽/秒) | 右肘角(投影) | 粗分类 |
+|---|---|---|---|---|---|
+| 1 | 142 | 4.7s | 8.2 | 138° | 高点击球 |
+
+<span class="gu">## 观察到的趋势</span>
+
+<span class="k">-</span><span class="w"> </span>前 10 次击球，右肘角平均 142°，后 10 次平均 128°
+<span class="k">-</span><span class="w"> </span><span class="gs">**差异 14°**</span>，大于本文档设定的 ±10° 阈值，可能反映...
+
+<span class="gu">## ⚠️ 本报告的局限</span>
+
+<span class="k">-</span><span class="w"> </span>所有角度均为**画面投影角**，非生物力学真值
+<span class="k">-</span><span class="w"> </span>击球时刻由手腕速度峰值检测，可能存在漏检/误检，已人工抽检 5 处
+<span class="k">-</span><span class="w"> </span>高度类指标依赖场地标定，误差约 ±0.1 m
+</code></pre></div>
+
+<p><strong>"局限"这一节是最重要的。</strong> 它让你说的话可信。</p>
+<hr>
+<h2 id="九给-AI-编程助手的提示词">九、给 AI 编程助手的提示词</h2>
+<blockquote>
+<p>我的目标：从<strong>单目固定机位</strong>手机视频里算羽毛球击球指标
+（击球时刻、击球点画面坐标、持拍侧肘/肩的<strong>投影角</strong>、挥拍速度、髋中心位移、回合节奏）。</p>
+<p><strong>请不要</strong>给我 3D 关节角、力矩、地面反作用力、躯干旋转角度——这些单目算不出。
+<strong>如果我要求了，请先告诉我为什么算不出。</strong></p>
+<p>技术栈：<code>ultralytics</code>（<code>yolo26n-pose.pt</code>）+ <code>opencv-python</code> + <code>pandas</code> + <code>numpy</code>。
+请先给"每帧骨架 → 置信度过滤 → Savitzky-Golay 平滑 → 手腕速度峰值定击球帧 → 计算角度"
+的<strong>最小可跑脚本</strong>，再谈模型训练。</p>
+<p>每个指标都要标注<strong>单位</strong>和<strong>坐标系</strong>（像素 / 米），角度必须说明是 <strong>2D 投影角</strong>。
+请主动提醒我做场地标定。</p>
+<p>数据划分请默认<strong>按 session / 比赛切分</strong>，并<strong>主动检查</strong>有没有同一回合的相邻帧
+被分到了训练集和测试集两边。</p>
+<p>平滑请用 Savitzky-Golay（<strong>不要用移动平均</strong>，它会削平我要检测的峰值），
+并告诉我 window 该怎么选、怎么验证峰值没被抹平。</p>
+<p>涉及 TrackNetV3 等外部仓库时，<strong>不要凭记忆编造仓库路径、权重文件名、命令行参数</strong>，
+不确定就说不确定，让我自己去核对 README。</p>
+</blockquote>
+<div class="pager">
+<a class="prev" href="p2-03.html"><span class="lbl">上一篇</span><span class="ttl">姿态估计与骨架提取</span></a>
+<a class="next" href="p2-05.html"><span class="lbl">下一篇</span><span class="ttl">常见坑与调试</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>示例 agent 预设 · 羽毛球 AI 教练</title>
+<meta name="description" content="一个可以直接装进 DSH 的预设：专属人格 + 自定义工具插件。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<script>(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})()</script>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/pygments.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" type="button" aria-label="菜单">☰</button>
+  <a class="brand" href="index.html">🏸 羽毛球 AI 教练<span>.</span></a>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜索（按 /）" autocomplete="off"
+           spellcheck="false" aria-label="站内搜索">
+    <div id="search-results" role="listbox"></div>
+  </div>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="切换主题">🌙</button>
+  <div id="progress"></div>
+</header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+<div class="nav-group"><h3>开始</h3>
+<a href="index.html">🏸 首页与学习计划</a>
+</div>
+<div class="nav-group"><h3>路线 A · 多 agent 协作</h3>
+<a href="p1-01.html"><span class="num">1</span>为什么需要多 agent</a>
+<a href="p1-02.html"><span class="num">2</span>DSH 多 agent 机制全解</a>
+<a href="p1-03.html"><span class="num">3</span>手把手搭建 preset</a>
+<a href="p1-04.html"><span class="num">4</span>workflow 脚本编写</a>
+<a href="p1-05.html"><span class="num">5</span>实战复盘：43 条错误</a>
+</div>
+<div class="nav-group"><h3>路线 B · YOLO 与骨架分析</h3>
+<a href="p2-01.html"><span class="num">1</span>总览与技术路线</a>
+<a href="p2-02.html"><span class="num">2</span>YOLO 从零到能用</a>
+<a href="p2-03.html"><span class="num">3</span>姿态估计与骨架提取</a>
+<a href="p2-04.html"><span class="num">4</span>羽毛球分析实战</a>
+<a href="p2-05.html"><span class="num">5</span>常见坑与调试</a>
+</div>
+<div class="nav-group"><h3>代码与资料</h3>
+<a href="starter.html">可运行代码骨架</a>
+<a href="preset-coach.html" class="current">示例 agent 预设</a>
+<a href="research-00.html">审校报告（43 条纠错）</a>
+<a href="research-01.html">调研 01 · YOLO 全景</a>
+<a href="research-02.html">调研 02 · 数据集与训练</a>
+<a href="research-03.html">调研 03 · 姿态估计</a>
+<a href="research-04.html">调研 04 · 骨架时序</a>
+<a href="research-05.html">调研 05 · 羽毛球专项</a>
+<a href="research-06.html">调研 06 · 工程与部署</a>
+</div>
+<div class="nav-group"><h3>外部</h3>
+<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</div>
+</nav>
+<main>
+<div class="content">
+<div class="doc-meta"><span class="crumb">代码与资料</span></div>
+<h1 id="preset-coach-一个可以直接装的-agent-预设">preset-coach · 一个可以直接装的 agent 预设</h1>
+<blockquote>
+<p>这是"如何搭建 agent preset"的<strong>成品</strong>。
+教程在 <a href="p1-03.html"><code>part1-多agent协作/03-手把手搭建preset.md</code></a>，这里是可直接使用的文件。</p>
+</blockquote>
+<hr>
+<h2 id="它是什么">它是什么</h2>
+<p>一个基于官方 <code>standard</code> 预设复制、改了两处的 agent 组成：</p>
+<table>
+<thead>
+<tr>
+<th>改动</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>① 人格</strong></td>
+<td>换成羽毛球分析工程助手；明确要求"偏好最小可运行脚本、先说清假设、不许编造库名和命令"</td>
+</tr>
+<tr>
+<td><strong>② 新增一个自定义工具</strong></td>
+<td><code>tool-session-status.mjs</code> —— 扫描分析项目，报告每个 session 跑到哪一步了</td>
+</tr>
+</tbody>
+</table>
+<p>其余的行（文件、Shell、Skills、子代理、workflow、ralph…）与官方 <code>standard</code> 完全一致。</p>
+<hr>
+<h2 id="文件清单">文件清单</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agent.cordis.yml</code></td>
+<td>组成文件 —— 这个 agent 挂载哪些 plugin row</td>
+</tr>
+<tr>
+<td><code>preset.yml</code></td>
+<td>显示名和描述</td>
+</tr>
+<tr>
+<td><code>tool-session-status.mjs</code></td>
+<td>自定义工具插件（本地文件行 <code>name: ./tool-session-status.mjs</code>）</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="怎么安装">怎么安装</h2>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="c"># 复制到你的预设目录</span>
+<span class="nb">Copy-Item</span> <span class="n">-Path</span> <span class="p">.\</span><span class="n">preset-coach</span><span class="p">\*</span> <span class="n">-Destination</span> <span class="s2">"$env:USERPROFILE\.dsh\.agent-presets\coach"</span> <span class="n">-Recurse</span> <span class="n">-Force</span>
+
+<span class="c"># 重启 DSH，然后新建会话时选「羽毛球教练」</span>
+</code></pre></div>
+
+<p>装完<strong>验证两件事</strong>：</p>
+<ol>
+<li>问它 <strong>"你现在有哪些工具？"</strong> —— 应该出现 <code>pose_status</code></li>
+<li>调一下 <code>pose_status</code> —— 应该返回一张表格</li>
+</ol>
+<blockquote class="warn">
+<p>⚠️ 预设列表里的 <code>broken</code> 标记<strong>不等于</strong>校验通过。
+真正的验收只有一条：<strong>新建会话，看工具列表对不对。</strong></p>
+</blockquote>
+<hr>
+<h2 id="静态校验不启动会话就能查">静态校验（不启动会话就能查）</h2>
+<p>仓库里带了一个校验器：</p>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="n">node</span> <span class="p">.\</span><span class="n">part1</span><span class="p">-</span><span class="n">多agent协作</span><span class="p">\</span><span class="n">validate-preset</span><span class="p">.</span><span class="n">mjs</span> <span class="s2">"$env:USERPROFILE\.dsh\.agent-presets\coach"</span>
+</code></pre></div>
+
+<p>它检查 YAML 能否解析（含 <code>!!js</code> 标签）、每行有没有 id/name、引用的包在不在
+DSH 的 <code>node_modules</code> 里、本地 <code>.mjs</code> 存不存在且语法正确。</p>
+<p>找不到 DSH 安装目录时会提示你用 <code>--root</code> 或 <code>DSH_APP_ROOT</code> 指定。</p>
+<p><strong>它查不出</strong>这三类（只有真正挂载才会暴露）：</p>
+<ul>
+<li><code>invalid config: $.&lt;字段&gt; missing required value</code></li>
+<li><code>N row(s) did not activate: &lt;id&gt;: waiting for &lt;服务&gt;</code></li>
+<li><code>row(s) published process-global service(s) [&lt;名字&gt;]</code></li>
+</ul>
+<hr>
+<h2 id="这个预设是怎么被验证的">这个预设是怎么被验证的</h2>
+<p>不是"看起来对"，是<strong>真的挂载过</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>预设</th>
+<th>启用行数</th>
+<th>全部 <code>fiberState</code> 一致</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>standard</code>（官方，已知可用）</td>
+<td>24</td>
+<td>✅ 基线</td>
+</tr>
+<tr>
+<td><strong><code>coach</code></strong></td>
+<td><strong>25</strong></td>
+<td>✅ 比基线正好多一行</td>
+</tr>
+<tr>
+<td><code>liangshen</code>（另一个自写预设）</td>
+<td>25</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<p>多出来的那一行正是 <code>tool-session-status</code> —— 说明<strong>自定义插件真的激活了</strong>。</p>
+<blockquote>
+<p>踩过的坑：<code>fiberState</code> 是<strong>数字枚举</strong>，光看 <code>2</code> 判断不了它是不是"已激活"。
+正确做法是<strong>拿一个已知能用的预设当基线对照</strong>，看差异是不是正好等于你的改动。</p>
+</blockquote>
+<hr>
+<h2 id="想改的话">想改的话</h2>
+<table>
+<thead>
+<tr>
+<th>想做什么</th>
+<th>改哪里</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>改人格（它怎么说话、什么风格）</td>
+<td><code>agent.cordis.yml</code> 里 <code>persona</code> 那一行的 <code>text</code></td>
+</tr>
+<tr>
+<td>让这个 agent 少一个能力</td>
+<td>删掉对应的行，比如删 <code>tool-ralph</code> 就没有 ralph 了</td>
+</tr>
+<tr>
+<td>加自己的工具</td>
+<td>照着 <code>tool-session-status.mjs</code> 写一个 <code>.mjs</code>，再加一行 <code>name: ./你的文件.mjs</code></td>
+</tr>
+<tr>
+<td>调整工具的输出目录</td>
+<td><code>tool-session-status</code> 那一行的 <code>config.outputsDir</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>两条铁律</strong>（写在 <code>agent.cordis.yml</code> 的注释里）：</p>
+<ol>
+<li><strong>会"提供服务"的行，必须包在带 <code>isolate</code> 的分组里</strong> —— 否则第二个会话挂载时会撞名</li>
+<li><strong>只消费 host 能力的行，绝对不能包 <code>isolate</code></strong> —— 包了就找不到 host 的实例，<strong>静默失效</strong></li>
+</ol>
+<p>第 2 条很阴险：<strong>包错了不报错</strong>，只是那个工具永远不出现。</p>
+<div class="pager">
+<a class="prev" href="starter.html"><span class="lbl">上一篇</span><span class="ttl">可运行代码骨架</span></a>
+<a class="next" href="research-00.html"><span class="lbl">下一篇</span><span class="ttl">审校报告（43 条纠错）</span></a>
+</div>
+</div>
+</main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
