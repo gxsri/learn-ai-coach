@@ -443,6 +443,9 @@ def home_page(readme_html):
                 % (slug, html.escape(gname.split(' · ')[0]), html.escape(title), desc_html))
         cards.append('</div>')
 
+    # README 的第一个 h1 和 hero 标题重复，去掉它
+    body = re.sub(r'^\s*<h1[^>]*>.*?</h1>\s*', '', readme_html, count=1, flags=re.S)
+
     main = (
         '<section class="hero">'
         '<h1>把 AI 变成你的<em>羽毛球教练</em></h1>'
@@ -455,8 +458,14 @@ def home_page(readme_html):
         '<a class="btn ghost" href="starter.html">看能跑的代码</a>'
         '</div></section>\n'
         + '\n'.join(cards)
+        + '\n<h2 class="section-title">总纲与 30 天计划</h2>'
+        + '\n<p class="section-sub">下面就是仓库 README 的全文：产出清单、'
+          '三条最重要的心法、学习节奏、以及各组件的实测验证状态。</p>'
+        + '\n<div class="content home-doc">\n' + body + '\n</div>'
         + '\n<footer class="site-footer">用 DSH 的 7 个 agent 调研 + 交叉审校产出 · '
-          '代码在 RTX 4060 / torch 2.11 / ultralytics 8.4.153 上验证通过</footer>'
+          '代码在 RTX 4060 / torch 2.11 / ultralytics 8.4.153 上验证通过 · '
+          '<a href="https://github.com/gxsri/learn-ai-coach" target="_blank" '
+          'rel="noopener">GitHub 源码</a></footer>'
     )
     return main
 

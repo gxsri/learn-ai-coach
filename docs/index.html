@@ -93,7 +93,428 @@
 <a class="card" href="research-05.html"><div class="kicker">代码与资料</div><h3>调研 05 · 羽毛球专项</h3><p>ShuttleSet、TrackNet、单目 2D 的硬边界。</p></a>
 <a class="card" href="research-06.html"><div class="kicker">代码与资料</div><h3>调研 06 · 工程与部署</h3><p>视频读写、骨架渲染、Gradio、项目结构。</p></a>
 </div>
-<footer class="site-footer">用 DSH 的 7 个 agent 调研 + 交叉审校产出 · 代码在 RTX 4060 / torch 2.11 / ultralytics 8.4.153 上验证通过</footer>
+<h2 class="section-title">总纲与 30 天计划</h2>
+<p class="section-sub">下面就是仓库 README 的全文：产出清单、三条最重要的心法、学习节奏、以及各组件的实测验证状态。</p>
+<div class="content home-doc">
+<blockquote>
+<p>为你一个人准备的：<strong>多 agent 协作怎么搭</strong> + <strong>YOLO 与运动骨架分析怎么学</strong>。</p>
+<p>背景设定：学过 Python 视频课、实操不多、主要靠 AI 助手写代码、懂 AI 原理和 harness 工程，
+目标是用<strong>手机拍的羽毛球视频</strong>做运动表现分析。</p>
+<p><strong>这两件事不是分开的</strong> —— 多 agent 是你学 YOLO 的加速器。第 4 节的 30 天计划把它们编在一起。</p>
+</blockquote>
+<hr>
+<h2 id="一先看这个本次会话真实产出了什么">一、先看这个：本次会话真实产出了什么</h2>
+<table>
+<thead>
+<tr>
+<th>产出</th>
+<th>位置</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>多 agent 协作教程（5 篇 + 4 个可运行示例）</td>
+<td><code>part1-多agent协作/</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>YOLO 与骨架分析教程（5 篇）</td>
+<td><code>part2-YOLO与骨架/</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>可运行的代码骨架（8 个文件）</td>
+<td><code>starter/</code></td>
+<td>✅ 核心算法已通过 26 项自检</td>
+</tr>
+<tr>
+<td>一个可安装的 agent 预设</td>
+<td><code>preset-coach/</code></td>
+<td>✅ 含自定义工具插件</td>
+</tr>
+<tr>
+<td><strong>7 份调研笔记 + 1 份审校报告</strong></td>
+<td><code>research/</code></td>
+<td>✅ 由 7 个 agent 并行产出并交叉核验</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><code>research/</code> 里的东西值得单独说：那是<strong>一次真实的多 agent 运行</strong>的产物 ——
+6 个 agent 并行调研、1 个 agent 交叉审校，抓到 <strong>43 条具体错误</strong>，
+包括 3 条跑不通的命令、12 处版本/参数错误、和 1 个跨文件自相矛盾的核心结论。</p>
+<p>复盘见 <a href="p1-05.html"><code>part1-多agent协作/05-实战复盘.md</code></a> —— <strong>那篇比任何教程都更能让你理解多 agent 的价值和边界。</strong></p>
+</blockquote>
+<hr>
+<h2 id="二目录导航">二、目录导航</h2>
+<div class="codehilite"><pre><span></span><code>learn-ai-coach/
+│
+├── README.md                    ← 你在这里
+│
+├── part1-多agent协作/            【路线 A：怎么指挥一支 AI 队伍】
+│   ├── 01-为什么需要多agent.md         什么时候该拆、什么时候不该拆
+│   ├── 02-DSH多agent机制全解.md        你这套 harness 的真实机制
+│   ├── 03-手把手搭建preset.md          ⭐ 如何搭建你自己的 agent
+│   ├── 04-workflow脚本编写.md          ⭐ 如何写编排脚本
+│   ├── 05-实战复盘.md                  ⭐ 上面那次运行的真实数据
+│   └── examples/                       4 个可直接改的 workflow 脚本
+│
+├── part2-YOLO与骨架/             【路线 B：怎么学会做羽毛球分析】
+│   ├── 01-总览与技术路线.md            ⭐ 先读这篇：做得到什么、做不到什么
+│   ├── 02-YOLO从零到能用.md            环境、推理、标注、训练、导出
+│   ├── 03-姿态估计与骨架提取.md        ⭐ 从视频到骨架坐标
+│   ├── 04-羽毛球运动表现分析实战.md    ⭐ 从骨架到指标到报告
+│   └── 05-常见坑与调试.md              ⭐ 工具书，卡住就查
+│
+├── starter/                      【可运行的代码】
+│   ├── README.md                      用法总览
+│   ├── setup.ps1                      一键装环境
+│   ├── selftest.py                    26 项算法自检（现在就能跑）
+│   ├── 01_check_env.py                环境体检（现在就能跑）
+│   ├── make_demo_session.py           合成数据生成器（现在就能跑）
+│   ├── 02_extract_pose.py             视频 → 骨架 CSV
+│   ├── 03_events_and_metrics.py       骨架 → 击球事件 + 指标
+│   └── 04_report.py                   → 曲线图 + HTML 报告
+│
+├── preset-coach/                 【一个可以直接安装的 agent 预设】
+│   ├── agent.cordis.yml               组成（基于官方 standard 副本改的）
+│   ├── preset.yml                     显示名与描述
+│   └── tool-session-status.mjs        自定义工具插件样本
+│
+└── research/                     【7 个 agent 的调研产出】
+    ├── 00-审校报告.md                  ⭐ 43 条错误的定位与修正建议
+    ├── 01-YOLO技术全景与硬件选型.md
+    ├── 02-YOLO自定义数据集与训练全流程.md
+    ├── 03-姿态估计技术全景.md
+    ├── 04-骨架时序分析与动作识别.md
+    ├── 05-羽毛球专项研究与数据集.md
+    └── 06-工程实现与可视化部署.md
+</code></pre></div>
+
+<hr>
+<h2 id="三三条最重要的心法如果只记三件事">三、三条最重要的心法（如果只记三件事）</h2>
+<h3 id="①-单目手机视频算不出生物力学真值-先把项目定位改对">① 单目手机视频<strong>算不出</strong>生物力学真值 —— 先把项目定位改对</h3>
+<p>论文里的关节角度、躯干旋转、鞭打时序，<strong>全部来自 3D 运动捕捉</strong>。
+单目 2D 有系统性低估（对照研究测得髋约 −11.2°、膝约 −10.6°）。</p>
+<p><strong>你要做的是"画面投影指标的纵向对比"</strong>，不是生物力学测量。
+这个定位一变，你的报告立刻从"不严谨"变成"诚实的工具"。</p>
+<blockquote>
+<p>那 6 份调研笔记里，有两个 agent 把"算关节角度"当核心卖点，
+另外两个明确说"单目算不出真值"—— <strong>它们直接矛盾</strong>，
+而这个矛盾只有交叉审校环节才被发现。
+详见 <a href="p1-05.html"><code>part1-多agent协作/05-实战复盘.md</code></a> 的案例 B。</p>
+</blockquote>
+<h3 id="②-多-agent-买到的不是更聪明是隔离-并行-独立视角">② 多 agent 买到的不是"更聪明"，是"隔离 + 并行 + 独立视角"</h3>
+<p><strong>唯一真正变强的地方是"验证者"</strong>：一个 agent 写，另一个专门挑错。</p>
+<p>因为 AI 会给自己的产出背书 —— 让它"再检查一遍"，它倾向于说"没问题"。
+换一个没有那段上下文的 agent，它才真的会挑错。</p>
+<blockquote>
+<p><strong>实测数据</strong>：6 个调研 agent + 1 个审校 agent，抓到 43 条错误。
+单靠任何一个写手 agent 自查，一条都抓不出来。</p>
+</blockquote>
+<h3 id="③-你不需要会调试但你必须会喂料">③ 你不需要会调试，但你必须会「喂料」</h3>
+<p>AI 助手看不到你的屏幕。<strong>它只能根据你给的信息推理。</strong></p>
+<p>一条铁律：<strong>永远贴完整的报错</strong>（从 <code>Traceback</code> 到最后一行），
+不要只说"跑不起来"。模板在 <a href="p2-05.html"><code>part2-YOLO与骨架/05-常见坑与调试.md</code></a> 第六节。</p>
+<p>再加一招，效果翻倍：<strong>让助手先诊断，不要它马上改。</strong></p>
+<blockquote>
+<p>"先不要改代码。请先列出这个现象最可能的 3 个原因，按可能性排序，
+以及每个原因我要运行什么命令来确认。等我确认了再改。"</p>
+<p>这一招能避免它对着错误的原因改十遍。</p>
+</blockquote>
+<hr>
+<h2 id="四30-天计划两条路线编在一起">四、30 天计划（两条路线编在一起）</h2>
+<p><strong>核心思路</strong>：<strong>每周都用多 agent 帮你学 YOLO。</strong> 你不是"先学 A 再学 B"，
+而是"用 B 的方法去学 A"。</p>
+<h3 id="第-1-周-看见东西">第 1 周 · 看见东西</h3>
+<table>
+<thead>
+<tr>
+<th>天</th>
+<th>做什么</th>
+<th>产出</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>跑 <code>python 01_check_env.py</code> 和 <code>python selftest.py</code></td>
+<td>知道缺什么</td>
+</tr>
+<tr>
+<td>1</td>
+<td>读 <a href="p2-01.html"><code>part2/01-总览与技术路线.md</code></a></td>
+<td><strong>明确"做不到什么"</strong></td>
+</tr>
+<tr>
+<td>2</td>
+<td>跑 <code>setup.ps1</code> 装环境；装 ffmpeg</td>
+<td>CUDA 可用</td>
+</tr>
+<tr>
+<td>2</td>
+<td>读 <a href="p1-01.html"><code>part1/01-为什么需要多agent.md</code></a></td>
+<td>建立五种协作模式的概念</td>
+</tr>
+<tr>
+<td>3</td>
+<td>拍 3 段羽毛球视频（固定机位、全身入画、快门调快）</td>
+<td>素材</td>
+</tr>
+<tr>
+<td>3</td>
+<td>跑 <code>make_demo_session.py</code> + 手工核对击球次数</td>
+<td><strong>验证流水线是通的</strong></td>
+</tr>
+<tr>
+<td>4</td>
+<td>跑 <code>02_extract_pose.py</code> 处理自己的视频</td>
+<td><code>01_pose.csv</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>读 <a href="p1-02.html"><code>part1/02-DSH多agent机制全解.md</code></a></td>
+<td>知道四种分身怎么选</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>检查 track_id 稳定性</strong>，调跟踪器直到稳住</td>
+<td>稳定的骨架</td>
+</tr>
+<tr>
+<td>6</td>
+<td>跑 <code>03_</code> + <code>04_</code>，看第一份报告</td>
+<td><code>report.html</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td>读 <a href="p1-05.html"><code>part1/05-实战复盘.md</code></a></td>
+<td><strong>理解多 agent 的边界</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>本周跑通标志</strong>：你自己的视频 → 一份报告，里面有合理的击球次数和曲线。</p>
+<h3 id="第-2-周-学会用-agent-干活">第 2 周 · 学会用 agent 干活</h3>
+<table>
+<thead>
+<tr>
+<th>天</th>
+<th>做什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8-9</td>
+<td>读 <a href="p1-04.html"><code>part1/04-workflow脚本编写.md</code></a>，<strong>跑通 examples/01 和 02</strong></td>
+</tr>
+<tr>
+<td>9</td>
+<td>跑 <code>examples/02</code> 时注意看：审校 agent 挑出了写手 agent 的哪些错</td>
+</tr>
+<tr>
+<td>10</td>
+<td>把 <code>examples/01</code> 改成<strong>你自己的 3 个问题</strong></td>
+</tr>
+<tr>
+<td>11</td>
+<td>读 <a href="p1-03.html"><code>part1/03-手把手搭建preset.md</code></a>，安装 <code>preset-coach</code>，新建会话验证工具列表</td>
+</tr>
+<tr>
+<td>12</td>
+<td>改 <code>preset-coach</code> 里的 <code>tool-session-status.mjs</code>，加一个你自己想要的字段</td>
+</tr>
+<tr>
+<td>13-14</td>
+<td><strong>用 workflow 调研你自己卡住的问题</strong>（比如"我的视频里骨架老是跳怎么办"）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>本周跑通标志</strong>：你能自己写一个 workflow，让 3 个 agent 并行帮你干活。</p>
+<h3 id="第-3-周-让指标变得可信">第 3 周 · 让指标变得可信</h3>
+<table>
+<thead>
+<tr>
+<th>天</th>
+<th>做什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>15-16</td>
+<td>读 <code>part2/03-</code>，把骨架叠加视频做出来，肉眼检查跟不跟得住</td>
+</tr>
+<tr>
+<td>17-18</td>
+<td>读 <code>part2/04-</code>，理解"先找击球、再算指标"的思路</td>
+</tr>
+<tr>
+<td>19</td>
+<td><strong>场地标定</strong>：手工点 4 个角点，验证重投影误差 &lt; 2 像素</td>
+</tr>
+<tr>
+<td>20</td>
+<td>把速度从"肩宽/秒"换成"米/秒"</td>
+</tr>
+<tr>
+<td>21</td>
+<td>建立你的<strong>基线</strong>：同一机位拍两次，看指标差异有多大</td>
+</tr>
+</tbody>
+</table>
+<p><strong>本周跑通标志</strong>：你能说出"这个角度差异是 ±X 度以内，所以我不下结论"。</p>
+<h3 id="第-4-周-做成能给别人看的东西">第 4 周 · 做成能给别人看的东西</h3>
+<table>
+<thead>
+<tr>
+<th>天</th>
+<th>做什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>22-24</td>
+<td>录 5-10 段视频，<strong>用 workflow 批量处理</strong>（模板 4：流水线）</td>
+</tr>
+<tr>
+<td>25</td>
+<td>按 session 划分数据，检查<strong>有没有数据泄漏</strong></td>
+</tr>
+<tr>
+<td>26-27</td>
+<td>改进报告：加上你自己的观察和结论</td>
+</tr>
+<tr>
+<td>28</td>
+<td>用 <code>examples/02</code> 的模式，<strong>让一个 agent 审校你的结论</strong></td>
+</tr>
+<tr>
+<td>29-30</td>
+<td>写一份 README，把"局限"一节写清楚</td>
+</tr>
+</tbody>
+</table>
+<p><strong>最终产出</strong>：一个能给别人看的羽毛球分析小工具，且你清楚它的边界在哪。</p>
+<hr>
+<h2 id="五每天的节奏30-60-分钟">五、每天的节奏（30-60 分钟）</h2>
+<div class="codehilite"><pre><span></span><code>10 分钟  读一页文档（一次只读一小节，读完就动手）
+20 分钟  跑代码，改参数，看结果
+10 分钟  把遇到的问题和解决方式写进 DEBUG.md
+10 分钟  用 AI 助手解释你不懂的那一行
+</code></pre></div>
+
+<p><strong>两条规矩</strong>：</p>
+<ol>
+<li><strong>不要一天装完所有东西再学。</strong> 装一点、用一点。环境问题是长期的，遇到了再解决。</li>
+<li><strong>每天把进展写进 <code>DEBUG.md</code>。</strong> 你主要靠 AI 助手写代码，而<strong>文件是助手唯一可靠的记忆</strong>。
+   下次遇到同样的问题，你和它都能直接翻到答案。</li>
+</ol>
+<hr>
+<h2 id="六这个学习包的验证状态诚实说明">六、这个学习包的验证状态（诚实说明）</h2>
+<p><strong>全部组件都已在一台真实的机器上跑通</strong>（RTX 4060 Laptop / Python 3.12 / Windows）：</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selftest.py</code> 26 项算法自检</td>
+<td>✅ <strong>26/26 通过</strong></td>
+</tr>
+<tr>
+<td><code>01_check_env.py</code></td>
+<td>✅ 正确识别环境；正确诊断出 ffmpeg 缺失</td>
+</tr>
+<tr>
+<td><code>02_extract_pose.py</code>（真实视频 + 真实 YOLO）</td>
+<td>✅ <strong>跑通</strong>：341 帧 1080p 视频，27.3s，11-12 帧/秒，产出 1014 行骨架</td>
+</tr>
+<tr>
+<td><code>03_events_and_metrics.py</code></td>
+<td>✅ <strong>跑通</strong>（合成数据 + 真实视频两种输入）</td>
+</tr>
+<tr>
+<td><code>04_report.py</code></td>
+<td>✅ <strong>跑通</strong>，<code>curves.png</code> 与 <code>report.html</code> 均正常生成，中文字体正常</td>
+</tr>
+<tr>
+<td><code>make_demo_session.py</code></td>
+<td>✅ <strong>跑通</strong>，2 球员 × 3 击球，检出 <strong>6/6</strong>，最大误差 <strong>1 帧</strong></td>
+</tr>
+<tr>
+<td><code>validate-preset.mjs</code></td>
+<td>✅ 三个预设（coach / standard / liangshen）全部通过</td>
+</tr>
+<tr>
+<td><code>coach</code> 预设的真实挂载校验</td>
+<td>✅ <code>standingKeyFor</code> 成功，25 行全部激活，自定义工具行确认生效</td>
+</tr>
+</tbody>
+</table>
+<p>环境实测版本：<code>torch 2.11.0+cu128</code> · <code>ultralytics 8.4.153</code> · <code>opencv 5.0.0</code> ·
+<code>pandas 3.0.5</code> · <code>numpy 2.5.2</code> · <code>matplotlib 3.11.2</code>，<strong>CUDA 可用</strong>。</p>
+<h3 id="跑通的过程中抓到了自己的四个-bug">跑通的过程中抓到了自己的四个 bug</h3>
+<p><strong>这不是缺点，这是"必须真的跑一遍"的理由。</strong> 四个 bug 全部写进了教程：</p>
+<p><strong>属于数据/算法类的两个：</strong></p>
+<ol>
+<li>
+<p><strong>把 <code>track_id = -1</code> 当成了一个球员。</strong>
+   跟踪器不给每个检测框都分配 id。341 帧的真实视频里 1014 行有 323 行（31.9%）没有 id。
+   旧代码把它们串成一条序列，<strong>不同人的坐标被接在一起</strong>，
+   算出 <strong>239 肩宽/秒</strong>的假速度，然后当成 7 次"击球"写进了报告。
+   → 修复：<code>03</code> 默认剔除 <code>track_id &lt; 0</code> 的行。教训写进 <code>part2/03</code>。</p>
+</li>
+<li>
+<p><strong>条形图的横轴刻度没意义。</strong>
+   用 <code>np.arange(n) + i*0.35</code> 当横坐标，轴上出现了 <code>0.00/0.25/0.50</code> 这种刻度。
+   → 修复：整数位置 + 偏移，刻度改成整数。</p>
+</li>
+</ol>
+<p><strong>属于 Windows 环境类的两个（更容易浪费一整晚）：</strong></p>
+<ol start="3">
+<li>
+<p><strong><code>Activate.ps1</code> 报"禁止运行脚本" → <code>python</code> 指向系统 Python。</strong>
+   PowerShell 默认禁止 <code>.ps1</code>，所以虚拟环境<strong>根本没激活</strong>。
+   但你看到的报错是 <code>ModuleNotFoundError: No module named 'pandas'</code> ——
+   <strong>它把你引向"是不是没装"这个完全错误的方向</strong>（其实装了，装在 <code>.venv</code> 里）。
+   → 修复：新增 <code>run.cmd</code> 启动器（<code>.cmd</code> 不受执行策略限制），
+   并让三个脚本在导入失败时<strong>自我诊断</strong>，直接告诉你"真正的问题是你用错了解释器"。</p>
+</li>
+<li>
+<p><strong><code>cmd.exe</code> 用 GBK 读 <code>.bat</code>，我写的中文注释被当成命令执行了。</strong>
+   表现为刷屏的 <code>'xxx' is not recognized as an internal or external command</code> 死循环。
+   → 修复：<code>run.cmd</code> 改为<strong>纯 ASCII</strong>。
+   同时发现本机是 <strong>Windows PowerShell 5.1</strong>，它读<strong>无 BOM</strong> 的 <code>.ps1</code> 会按 ANSI 解析，
+   中文全部乱码 → 给 <code>setup.ps1</code> 加了 UTF-8 BOM。</p>
+</li>
+</ol>
+<blockquote>
+<p><strong>这四个 bug 都不是"想"出来的，是"跑"出来的。</strong>
+静态检查、语法检查、代码审阅<strong>全都通过了</strong>——它们照样跑错。
+想省时间的话，记住这条顺序：<strong>先让它在最小输入上跑通，再去处理真实数据。</strong></p>
+</blockquote>
+<h3 id="还需要你自己做的">还需要你自己做的</h3>
+<ul>
+<li><strong>装 ffmpeg</strong>（唯一还没装的东西，抽帧做标注时才需要）：<code>winget install --id Gyan.FFmpeg -e</code></li>
+<li><strong>验收 <code>coach</code> 预设</strong>：新建会话 → 选「羽毛球教练」→ 问它"你现在有哪些工具？"，
+  列表里应该出现 <code>pose_status</code>。不想要就删掉整个 <code>coach</code> 目录。</li>
+</ul>
+<hr>
+<h2 id="七从这里开始">七、从这里开始</h2>
+<p><strong>现在就能做的三件事</strong>（不用装任何东西）：</p>
+<div class="codehilite"><pre data-lang="powershell"><span></span><code><span class="nb">cd </span><span class="n">D</span><span class="p">:\</span><span class="n">program</span><span class="p">\</span><span class="n">learn-ai-coach</span><span class="p">\</span><span class="n">starter</span>
+<span class="n">python</span> <span class="n">selftest</span><span class="p">.</span><span class="n">py</span>            <span class="c"># 26 项算法自检</span>
+<span class="n">python</span> <span class="n">01_check_env</span><span class="p">.</span><span class="n">py</span>        <span class="c"># 看看缺什么</span>
+<span class="n">python</span> <span class="n">make_demo_session</span><span class="p">.</span><span class="n">py</span>   <span class="c"># 生成合成数据</span>
+</code></pre></div>
+
+<p>然后读 <strong><a href="p2-01.html"><code>part2-YOLO与骨架/01-总览与技术路线.md</code></a></strong> ——
+那一篇会告诉你哪些事<strong>根本做不到</strong>，这比告诉你"怎么做"更值钱。</p>
+</div>
+<footer class="site-footer">用 DSH 的 7 个 agent 调研 + 交叉审校产出 · 代码在 RTX 4060 / torch 2.11 / ultralytics 8.4.153 上验证通过 · <a href="https://github.com/gxsri/learn-ai-coach" target="_blank" rel="noopener">GitHub 源码</a></footer>
 </main>
 </div>
 

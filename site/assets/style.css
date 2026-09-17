@@ -357,6 +357,11 @@ footer.site-footer {
   border-top: 1px solid var(--border); color: var(--text-faint);
   font-size: 13px; text-align: center;
 }
+footer.site-footer a { color: var(--accent); text-decoration: none; }
+
+/* 首页里嵌的 README 正文：左右对齐留白要和卡片一致 */
+.home-doc { padding-top: 10px; padding-bottom: 24px; }
+.home-doc > h1:first-child { display: none; }
 
 /* ── 响应式 ───────────────────────────────────────────────────── */
 @media (max-width: 1000px) {
